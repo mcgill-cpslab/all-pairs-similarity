@@ -1,6 +1,6 @@
 package cpslab.message
 
-import org.apache.spark.mllib.linalg.SparseVector
+import cpslab.vector.SparseVector
 
 trait Message
 

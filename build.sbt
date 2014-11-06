@@ -19,12 +19,10 @@ test in assembly :={}
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-adapted-args", "-feature")
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" % "akka-remote_2.10" % "2.3.6",
-  "com.typesafe.akka" % "akka-cluster_2.10" % "2.3.6",
   "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
   "com.typesafe" % "config" % "1.2.1",
   "org.apache.commons" % "commons-math3" % "3.3",
-  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0",
+  "org.scalanlp" % "breeze-math_2.10" % "0.4",
   "org.scalatest" % "scalatest_2.10" % "2.2.2"
 )
 

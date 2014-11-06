@@ -14,5 +14,11 @@ class SimilaritySearchService extends Actor {
     case getRequest @ GetInputRequest(_, _, _) =>
       workerRouter ! getRequest
   }
+}
 
+
+object SimilaritySearchService {
+
+  def main(args: Array[String]): Unit = {
+  }
 }
