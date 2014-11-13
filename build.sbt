@@ -19,6 +19,7 @@ test in assembly :={}
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-adapted-args", "-feature")
 
 libraryDependencies ++= Seq(
+  "com.typesafe.akka" % "akka-actor_2.10" % "2.3.6",
   "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
   "com.typesafe" % "config" % "1.2.1",
   "org.apache.hadoop" % "hadoop-client" % "2.3.0",
