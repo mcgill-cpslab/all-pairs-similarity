@@ -69,7 +69,7 @@ class WriteWorker(input: List[SparseVector], localService: ActorRef) extends Act
     case IOTrigger =>
       writeBufferLock.acquire()
       for ((key, vectors) <- writeBuffer) {
-        // TODO: userId might be discarded, need to investigate the evaluation report
+        // TODO: userId might be discarded, need to investigate the evaluation dataset
         var vectorSet = Set[SparseVector]()
         for (vector <- vectors) {
           vectorSet += vectorsStore(vector)
@@ -116,7 +116,9 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
   val writeParallelism = workerConf.getInt("cpslab.allpair.writeParallelism")
   val indexActorNum = workerConf.getInt("cpslab.allpari.indexActorNum")
 
+  //children
   val indexActors = new Array[ActorRef](indexActorNum)
+  val writeWorkersToInputSet = new mutable.HashMap[ActorRef, List[SparseVector]]
 
   val cluster = Cluster(context.system)
   // listen the MemberEvent
@@ -153,14 +155,13 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
       inputVectors = readFromDataBase(tableName, startRow, endRow)
       val inputVectorLists = inputVectors.grouped(writeParallelism).toList
       for (inputList <- inputVectorLists) {
-        //TODO: monitor the child actors
-        context.actorOf(Props(new WriteWorker(inputList, localService)))
+        val newWriterWorker = context.actorOf(Props(new WriteWorker(inputList, localService)))
+        context.watch(newWriterWorker)
       }
     case dp @ DataPacket(key, user, vector) =>
-      //TODO: receive vectors from other actors and index it
-      //TODO: monitor the child actors
       if (indexActors(key % indexActorNum) == null) {
         indexActors(key % indexActorNum) = context.actorOf(Props(new IndexingWorker))
+        context.watch(indexActors(key % indexActorNum))
       }
       indexActors(key % indexActorNum) ! dp
     case MemberUp(m) if m.hasRole("compute") =>
@@ -171,6 +172,23 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
       currentMemberNum -= 1
     case ReachableMember(m) if m.hasRole("compute") =>
       currentMemberNum += 1
+    case Terminated(stoppedChild) =>
+      // received from either WriteWorker or IndexingWorker
+      var stoppedChildIndex = indexActors.indexOf(stoppedChild)
+      if (stoppedChildIndex == -1) {
+        // is a WriteWorker, restart it
+        val newWriterWorker = context.actorOf(
+          Props(new WriteWorker(writeWorkersToInputSet(stoppedChild), localService)))
+        context.watch(newWriterWorker)
+        //TODO: How to de-duplicate
+        writeWorkersToInputSet += newWriterWorker -> writeWorkersToInputSet(stoppedChild)
+        writeWorkersToInputSet.remove(stoppedChild)
+      } else {
+        // is a IndexingWorker
+        //TODO: handle cannot deliver
+        indexActors(stoppedChildIndex) = context.actorOf(Props(new IndexingWorker))
+        context.watch(indexActors(stoppedChildIndex))
+      }
   }
 }
 

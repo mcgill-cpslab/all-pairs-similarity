@@ -74,10 +74,6 @@ class SimilaritySearchService(conf: Config) extends Actor {
     case ReachableMember(m) if m.hasRole("compute") =>
       currentMemberNum += 1
   }
-
-  def processing: Receive = {
-    null
-  }
 }
 
 object SimilaritySearchService {
