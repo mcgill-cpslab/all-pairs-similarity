@@ -20,23 +20,25 @@ import cpslab.vector.{SparseVector, Vectors}
 import cpslab.message.{DataPacket, GetInputRequest}
 
 
-class WriteWorker(input: List[SparseVector], localSerivce: ActorRef) extends Actor {
+class WriteWorker(input: List[SparseVector], localService: ActorRef) extends Actor {
 
   import context._
 
   case object IOTrigger
 
-  val writeBuffer: mutable.HashMap[Int, mutable.HashSet[SparseVector]] =
-    new mutable.HashMap[Int, mutable.HashSet[SparseVector]]
+  val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
+    new mutable.HashMap[Int, mutable.HashSet[Int]]
 
   val writeBufferLock: Lock = new Lock
 
   var parseTask: Cancellable = null
   var writeTask: Cancellable = null
 
+  var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
+
   override def preStart(): Unit = {
     parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
-      def run: Unit = {
+      def run(): Unit = {
         parseInput
       }
     })
@@ -49,13 +51,14 @@ class WriteWorker(input: List[SparseVector], localSerivce: ActorRef) extends Act
     writeTask.cancel()
   }
 
-  private def parseInput: Unit = {
+  private def parseInput(): Unit = {
     for (vector <- input){
+      vectorsStore += vector
       writeBufferLock.acquire()
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
-          nonZeroIdx % SimilarityWorker.currentMemberNum,
-          new mutable.HashSet[SparseVector]) += vector
+          nonZeroIdx,
+          new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()
     }
@@ -67,10 +70,36 @@ class WriteWorker(input: List[SparseVector], localSerivce: ActorRef) extends Act
       writeBufferLock.acquire()
       for ((key, vectors) <- writeBuffer) {
         // TODO: userId might be discarded, need to investigate the evaluation report
-        localSerivce ! DataPacket(key, 0, vectors.toSet)
+        var vectorSet = Set[SparseVector]()
+        for (vector <- vectors) {
+          vectorSet += vectorsStore(vector)
+        }
+        // TODO: duplicate vectors may send to the same node for multiple times
+        localService ! DataPacket(key, 0, vectorSet)
       }
       writeBuffer.clear()
       writeBufferLock.release()
+  }
+}
+
+class IndexingWorker extends Actor {
+
+  val cluster = Cluster(context.system)
+
+  val vectorsStore = new ListBuffer[SparseVector]
+
+  // dimentsionid => vector index
+  val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
+
+  def receive: Receive = {
+    case DataPacket(key, uid, vectors) =>
+      // save all index to the inverted index
+      for (vector <- vectors) {
+        vectorsStore += vector
+        val currentIdx = vectorsStore.size - 1
+        invertedIndex.getOrElseUpdate(key, new mutable.HashSet[Int]) += currentIdx
+      }
+      // TODO: output similar vectors
   }
 }
 
@@ -85,6 +114,9 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
   private var inputVectors: List[SparseVector] = null
 
   val writeParallelism = workerConf.getInt("cpslab.allpair.writeParallelism")
+  val indexActorNum = workerConf.getInt("cpslab.allpari.indexActorNum")
+
+  val indexActors = new Array[ActorRef](indexActorNum)
 
   val cluster = Cluster(context.system)
   // listen the MemberEvent
@@ -121,10 +153,16 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
       inputVectors = readFromDataBase(tableName, startRow, endRow)
       val inputVectorLists = inputVectors.grouped(writeParallelism).toList
       for (inputList <- inputVectorLists) {
+        //TODO: monitor the child actors
         context.actorOf(Props(new WriteWorker(inputList, localService)))
       }
-    case DataPacket(key, user, vector) =>
-      //TODO: receive vectors from other actors
+    case dp @ DataPacket(key, user, vector) =>
+      //TODO: receive vectors from other actors and index it
+      //TODO: monitor the child actors
+      if (indexActors(key % indexActorNum) == null) {
+        indexActors(key % indexActorNum) = context.actorOf(Props(new IndexingWorker))
+      }
+      indexActors(key % indexActorNum) ! dp
     case MemberUp(m) if m.hasRole("compute") =>
       currentMemberNum += 1
     case other: MemberEvent =>

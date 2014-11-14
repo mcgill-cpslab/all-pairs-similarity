@@ -9,7 +9,7 @@ import akka.routing.{ConsistentHashingGroup, FromConfig}
 import com.typesafe.config.Config
 import org.apache.hadoop.hbase.util.Bytes
 
-import cpslab.message.GetInputRequest
+import cpslab.message.{DataPacket, GetInputRequest}
 
 class SimilaritySearchService(conf: Config) extends Actor {
 
@@ -36,6 +36,7 @@ class SimilaritySearchService(conf: Config) extends Actor {
   def hashMapping: ConsistentHashMapping = {
     case gip @ GetInputRequest(_, _, _) =>
       math.abs(gip.hashCode % (currentMemberNum * virtualNodeFactor))
+    case DataPacket(key, _, _) => key
     case s: String => s
   }
 
@@ -58,9 +59,12 @@ class SimilaritySearchService(conf: Config) extends Actor {
           Bytes.toBytes(newEndKeyInt))
         // TODO: to ensure the reliable delivery of the message
         // we need to either use ask pattern or use persistent to achieve at-least-once
-        workerRouter ! ConsistentHashableEnvelope(readRequest, readRequest.hashCode())
+        workerRouter ! readRequest
         newStartKeyInt = newStartKeyInt + stepLength
       }
+    case dp @ DataPacket(_, _, _) =>
+      // send out through the router
+      workerRouter ! dp
     case MemberUp(m) if m.hasRole("compute") =>
       currentMemberNum += 1
     case other: MemberEvent =>

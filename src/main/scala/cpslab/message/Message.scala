@@ -7,4 +7,4 @@ trait Message
 case class GetInputRequest(tableName: String, startRow: Array[Byte], endRow: Array[Byte])
   extends Message
 
-case class DataPacket(key: Int, user: Int, vector: Set[SparseVector])
+case class DataPacket(primaryKey: Int, user: Int, vector: Set[SparseVector])
