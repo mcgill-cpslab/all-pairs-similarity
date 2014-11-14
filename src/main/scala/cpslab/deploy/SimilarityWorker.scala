@@ -187,7 +187,7 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
         val newWriterWorker = context.actorOf(
           Props(new WriteWorker(writeWorkersToInputSet(stoppedChild), localService)))
         context.watch(newWriterWorker)
-        //TODO: How to de-duplicate
+        //TODO: How to de-duplicate ...can be solved by persistent actor
         writeWorkersToInputSet += newWriterWorker -> writeWorkersToInputSet(stoppedChild)
         writeWorkersToInputSet.remove(stoppedChild)
       } else {
