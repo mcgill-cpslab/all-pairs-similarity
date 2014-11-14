@@ -8,3 +8,4 @@ case class GetInputRequest(tableName: String, startRow: Array[Byte], endRow: Arr
   extends Message
 
 case class DataPacket(primaryKey: Int, user: Int, vector: Set[SparseVector])
+  extends Message

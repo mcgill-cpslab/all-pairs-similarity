@@ -17,7 +17,7 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 
 import cpslab.vector.{SparseVector, Vectors}
-import cpslab.message.{DataPacket, GetInputRequest}
+import cpslab.message.{Message, DataPacket, GetInputRequest}
 
 
 class WriteWorker(input: List[SparseVector], localService: ActorRef) extends Actor {
@@ -122,7 +122,9 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
 
   val cluster = Cluster(context.system)
   // listen the MemberEvent
-  cluster.subscribe(self, classOf[MemberEvent], classOf[ReachabilityEvent])
+  cluster.subscribe(self, classOf[MemberEvent], classOf[ReachabilityEvent], classOf[DeadLetter])
+
+  val messagesToStoppedActor = new mutable.HashMap[ActorRef, ListBuffer[Message]]
 
   private def readFromDataBase(tableName: String,
                                startRow: Array[Byte], endRow: Array[Byte]): List[SparseVector] = {
@@ -172,6 +174,11 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
       currentMemberNum -= 1
     case ReachableMember(m) if m.hasRole("compute") =>
       currentMemberNum += 1
+    case DeadLetter(message, sender, recipient) =>
+      if (message.isInstanceOf[DataPacket] && sender == self) {
+        messagesToStoppedActor.getOrElseUpdate(recipient,
+          new ListBuffer[Message]) += message.asInstanceOf[DataPacket]
+      }
     case Terminated(stoppedChild) =>
       // received from either WriteWorker or IndexingWorker
       var stoppedChildIndex = indexActors.indexOf(stoppedChild)
@@ -185,9 +192,15 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
         writeWorkersToInputSet.remove(stoppedChild)
       } else {
         // is a IndexingWorker
-        //TODO: handle cannot deliver
         indexActors(stoppedChildIndex) = context.actorOf(Props(new IndexingWorker))
         context.watch(indexActors(stoppedChildIndex))
+        //re-send the buffer data
+        if (messagesToStoppedActor.contains(stoppedChild)) {
+          for (msg <- messagesToStoppedActor(stoppedChild)) {
+            indexActors(stoppedChildIndex) ! msg
+          }
+          messagesToStoppedActor.remove(stoppedChild)
+        }
       }
   }
 }
