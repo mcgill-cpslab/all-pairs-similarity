@@ -26,6 +26,7 @@ libraryDependencies ++= Seq(
   "org.apache.hbase" % "hbase-server" % "0.98.2-hadoop2",
   "org.apache.hbase" % "hbase-client" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-common" % "0.98.7-hadoop2",
+  "org.apache.hadoop" % "hadoop-distcp" % "2.3.0",
   "org.apache.commons" % "commons-math3" % "3.3",
   "org.scalanlp" % "breeze-math_2.10" % "0.4",
   "org.scalatest" % "scalatest_2.10" % "2.2.2"

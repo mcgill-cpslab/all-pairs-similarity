@@ -10,22 +10,6 @@ import scala.collection.mutable.ListBuffer
 
 object PreprocessWithTFIDF {
 
-  // TODO: change to functional style
-  def getAllFilePath(fs: FileSystem, rootPath: Path, list: ListBuffer[String]): Unit = {
-    val fileStatus = fs.getFileStatus(rootPath)
-    //list += fileStatus.getPath.toString
-    if (fileStatus.isDirectory) {
-      val allContainedFiles = fs.listStatus(rootPath)
-      for (file <- allContainedFiles) {
-        getAllFilePath(fs, file.getPath, list)
-      }
-    } else {
-      if (!fileStatus.getPath.toString.contains(".DS_Store")) {
-        list += fileStatus.getPath.toString
-      }
-    }
-  }
-
   /**
    * map each file specified in the allFilesPath to a single line (a string)
    * @param allFilesPath list of file path
@@ -64,7 +48,7 @@ object PreprocessWithTFIDF {
     val sc = new SparkContext()
     val rootPath = new Path(args(0))
     val allFilesToProcess = new ListBuffer[String]
-    getAllFilePath(rootPath.getFileSystem(sc.hadoopConfiguration),
+    Utils.getAllFilePath(rootPath.getFileSystem(sc.hadoopConfiguration),
       rootPath, allFilesToProcess)
     val fileContentRDD = mapEachFileToSingleLine(sc, allFilesToProcess)
     val tfidfRDD = computeTFIDFVector(sc, fileContentRDD)
