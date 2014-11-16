@@ -1,12 +1,12 @@
 package cpslab.deploy
 
-import akka.actor.{Props, Actor}
+import akka.actor.{ActorSystem, Props, Actor}
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
 import akka.cluster.routing.{ClusterRouterGroup, ClusterRouterGroupSettings}
 import akka.routing.ConsistentHashingRouter.{ConsistentHashMapping, ConsistentHashableEnvelope}
 import akka.routing.{ConsistentHashingGroup, FromConfig}
-import com.typesafe.config.Config
+import com.typesafe.config.{ConfigFactory, Config}
 import org.apache.hadoop.hbase.util.Bytes
 
 import cpslab.message.{DataPacket, GetInputRequest}
@@ -79,7 +79,21 @@ class SimilaritySearchService(conf: Config) extends Actor {
 object SimilaritySearchService {
 
   def main(args: Array[String]): Unit = {
+   /* if (args.isEmpty) {
+        startup(Seq("2551", "2552", "0"))
+        StatsSampleClient.main(Array.empty)
+      } else {
+        startup(args)
+      }
 
-    //start both SimilaritySearchService and SimilarityWorker
+    def startup(ports: Seq[String]): Unit = {
+      ports foreach { port =>
+        // Override the configuration of the port when specified as program argument
+        val system = ActorSystem("ClusterSystem", config)
+
+        system.actorOf(Props[StatsWorker], name = "statsWorker")
+        system.actorOf(Props[StatsService], name = "statsService")
+      }
+    }*/
   }
 }
