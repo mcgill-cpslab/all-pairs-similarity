@@ -13,14 +13,16 @@ object PreprocessWithTFIDF {
   // TODO: change to functional style
   def getAllFilePath(fs: FileSystem, rootPath: Path, list: ListBuffer[String]): Unit = {
     val fileStatus = fs.getFileStatus(rootPath)
-    list += fileStatus.getPath.toString
+    //list += fileStatus.getPath.toString
     if (fileStatus.isDirectory) {
       val allContainedFiles = fs.listStatus(rootPath)
       for (file <- allContainedFiles) {
         getAllFilePath(fs, file.getPath, list)
       }
     } else {
-      list += fileStatus.getPath.toString
+      if (!fileStatus.getPath.toString.contains(".DS_Store")) {
+        list += fileStatus.getPath.toString
+      }
     }
   }
 
