@@ -119,12 +119,27 @@ object Vectors {
     new DenseVector(new Array[Double](size))
   }
 
+  private def fromString(inputString: String): (Int, Array[Int], Array[Double]) = {
+    val stringArray = inputString.split(",[")
+    if (stringArray.length != 3) {
+      throw new Exception(s"cannot parse $inputString")
+    }
+    val size = stringArray(0).replace("(", "").toInt
+    val indices = stringArray(1).replace("]", "").split(",").map(_.toInt)
+    val values = stringArray(2).replace("])", "").split(",").map(_.toDouble)
+    (size, indices, values)
+  }
+
   private[cpslab] def parseNumeric(any: Any): Vector = {
     any match {
       case values: Array[Double] =>
         Vectors.dense(values)
       case Seq(size: Double, indices: Array[Double], values: Array[Double]) =>
         Vectors.sparse(size.toInt, indices.map(_.toInt), values)
+      case vectorString: String =>
+        //only support sparseVectors for now
+        val parsedResult = fromString(vectorString)
+        Vectors.sparse(parsedResult._1, parsedResult._2, parsedResult._3)
       case other =>
         throw new Exception(s"Cannot parse $other.")
     }
