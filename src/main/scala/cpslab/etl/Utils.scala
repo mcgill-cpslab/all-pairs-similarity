@@ -1,4 +1,4 @@
-package cpslab.data
+package cpslab.etl
 
 import scala.collection.mutable.ListBuffer
 import scala.io.Source

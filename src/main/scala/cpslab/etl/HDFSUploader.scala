@@ -1,4 +1,4 @@
-package cpslab.data
+package cpslab.etl
 
 import java.io._
 import java.util.Properties
