@@ -21,15 +21,6 @@ object PreprocessWithTFIDF {
   def mapEachFileToSingleLine(sc: SparkContext, allFilesPath: ListBuffer[String]): RDD[String] = {
     import org.apache.spark.SparkContext._
     var allFileContentRDD: RDD[String] = null
-    /*for (path <- allFilesPath) {
-      if (allFileContentRDD == null) {
-        allFileContentRDD = sc.textFile(path).map((" ", _)).reduceByKey(_ + " " + _).map(_._2)
-      } else {
-        allFileContentRDD = allFileContentRDD.union(
-          sc.textFile(path).map((" ", _)).reduceByKey(_ + " " + _).map(_._2)
-        )
-      }
-    }*/
     val allFilesPathRDD = sc.parallelize(allFilesPath, 4)
     allFileContentRDD = allFilesPathRDD.map(sourcePathString =>  {
       val hadoopConf = new Configuration()
