@@ -1,12 +1,13 @@
 import _root_.sbtassembly.Plugin.AssemblyKeys
 import _root_.sbtassembly.Plugin.AssemblyKeys._
 import _root_.sbtassembly.Plugin.PathList
+
 import sbtassembly.Plugin.AssemblyKeys._
 import sbtassembly.Plugin.{AssemblyKeys, MergeStrategy, PathList}
 
-assemblySettings
-
 org.scalastyle.sbt.ScalastylePlugin.Settings
+
+assemblySettings
 
 name := "AllPairsSimilarity"
 
@@ -19,7 +20,7 @@ test in assembly :={}
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-adapted-args", "-feature")
 
 libraryDependencies ++= Seq(
-  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0",
+  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0" % "provided",
   "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
   "com.typesafe" % "config" % "1.2.1",
   "org.apache.hadoop" % "hadoop-client" % "2.3.0",
