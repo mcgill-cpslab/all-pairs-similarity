@@ -20,12 +20,13 @@ test in assembly :={}
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-adapted-args", "-feature")
 
 libraryDependencies ++= Seq(
-  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0" % "provided",
+  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0",
   "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
   "com.typesafe" % "config" % "1.2.1",
   "org.apache.hadoop" % "hadoop-client" % "2.3.0",
-  "org.apache.hbase" % "hbase-server" % "0.98.2-hadoop2",
+  "org.apache.hbase" % "hbase-server" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-client" % "0.98.7-hadoop2",
+  "org.apache.hbase" % "hbase-protocol" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-common" % "0.98.7-hadoop2",
   "org.apache.hadoop" % "hadoop-distcp" % "2.3.0",
   "org.apache.commons" % "commons-math3" % "3.3",
