@@ -120,7 +120,7 @@ object Vectors {
   }
 
   private def fromString(inputString: String): (Int, Array[Int], Array[Double]) = {
-    val stringArray = inputString.split(",[")
+    val stringArray = inputString.split(",\\[")
     if (stringArray.length != 3) {
       throw new Exception(s"cannot parse $inputString")
     }
