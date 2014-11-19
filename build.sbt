@@ -1,13 +1,9 @@
-import _root_.sbtassembly.Plugin.AssemblyKeys
-import _root_.sbtassembly.Plugin.AssemblyKeys._
-import _root_.sbtassembly.Plugin.PathList
-
 import sbtassembly.Plugin.AssemblyKeys._
-import sbtassembly.Plugin.{AssemblyKeys, MergeStrategy, PathList}
 
 org.scalastyle.sbt.ScalastylePlugin.Settings
 
-assemblySettings
+//assemblySettings
+packAutoSettings
 
 name := "AllPairsSimilarity"
 
@@ -20,20 +16,21 @@ test in assembly :={}
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-Yno-adapted-args", "-feature")
 
 libraryDependencies ++= Seq(
+  "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
+  "com.typesafe.akka" % "akka-cluster_2.10" % "2.3.6",
   "com.google.protobuf" % "protobuf-java" % "2.5.0",
   "org.apache.hbase" % "hbase-server" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-client" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-protocol" % "0.98.7-hadoop2",
   "org.apache.hbase" % "hbase-common" % "0.98.7-hadoop2",
   "org.apache.spark" % "spark-mllib_2.10" % "1.1.0",
-  "com.typesafe.akka" % "akka-contrib_2.10" % "2.3.6",
   "com.typesafe" % "config" % "1.2.1",
   "org.apache.hadoop" % "hadoop-client" % "2.3.0",
   "org.apache.hadoop" % "hadoop-distcp" % "2.3.0",
   "org.apache.commons" % "commons-math3" % "3.3",
   "org.scalatest" % "scalatest_2.10" % "2.2.2"
 )
-
+/*
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
 {
   case PathList("META-INF", xs @ _*) =>
@@ -43,4 +40,4 @@ mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
     }
   case _ => MergeStrategy.first
 }
-}
+}*/

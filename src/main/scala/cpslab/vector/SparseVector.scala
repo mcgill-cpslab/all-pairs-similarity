@@ -1,12 +1,12 @@
 package cpslab.vector
 
-import java.util
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
+import java.util
+
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
-
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 // added this file to eliminated the dependency to spark (causing sbt
 // assembly extremely slow)

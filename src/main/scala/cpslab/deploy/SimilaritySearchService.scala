@@ -1,26 +1,27 @@
 package cpslab.deploy
 
-import akka.actor.{ActorSystem, Props, Actor}
+import akka.actor.{Actor, ActorSystem, Props}
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
-import akka.cluster.routing.{ClusterRouterGroup, ClusterRouterGroupSettings}
-import akka.routing.ConsistentHashingRouter.{ConsistentHashMapping, ConsistentHashableEnvelope}
-import akka.routing.{ConsistentHashingGroup, FromConfig}
+import akka.routing.ConsistentHashingRouter.ConsistentHashMapping
+import akka.routing.FromConfig
 import com.typesafe.config.{ConfigFactory, Config}
-import org.apache.hadoop.hbase.util.Bytes
-
 import cpslab.message.{DataPacket, GetInputRequest}
+import org.apache.hadoop.hbase.util.Bytes
 
 class SimilaritySearchService(conf: Config) extends Actor {
 
   // programmablly define the router
-  val workerRouter = context.actorOf(
+ /* val workerRouter = context.actorOf(
     ClusterRouterGroup(
-      ConsistentHashingGroup(List("/user/simWorker"), hashMapping = hashMapping),
+      ConsistentHashingGroup(List("/user/similarityService/workerRouter"),
+        hashMapping = hashMapping),
       ClusterRouterGroupSettings(
         totalInstances = 100, routeesPaths = List("/user/simWorker"),
         allowLocalRoutees = true, useRole = Some("compute"))).props(),
-      name = "workerRouter")
+      name = "workerRouter")*/
+  val workerRouter = context.actorOf(FromConfig.props(),
+    name = "workerRouter")
 
   val parallelism = conf.getInt("cpslab.allpair.parallelism")
 
@@ -30,8 +31,8 @@ class SimilaritySearchService(conf: Config) extends Actor {
 
   var currentMemberNum = 0
 
-  val virtualNodeFactor = math.max(context.system.settings.config.getInt(
-    "akka.actor.deployment./similarity/workerRouter/.virtual-nodes-factor"), 1)
+  // TODO: set virtualNodeFactor
+  val virtualNodeFactor = 1
 
   def hashMapping: ConsistentHashMapping = {
     case gip @ GetInputRequest(_, _, _) =>
@@ -79,21 +80,17 @@ class SimilaritySearchService(conf: Config) extends Actor {
 object SimilaritySearchService {
 
   def main(args: Array[String]): Unit = {
-   /* if (args.isEmpty) {
-        startup(Seq("2551", "2552", "0"))
-        StatsSampleClient.main(Array.empty)
-      } else {
-        startup(args)
-      }
 
-    def startup(ports: Seq[String]): Unit = {
-      ports foreach { port =>
-        // Override the configuration of the port when specified as program argument
-        val system = ActorSystem("ClusterSystem", config)
+    startup()
 
-        system.actorOf(Props[StatsWorker], name = "statsWorker")
-        system.actorOf(Props[StatsService], name = "statsService")
-      }
-    }*/
+    def startup(): Unit = {
+      // Override the configuration of the port when specified as program argument
+      val conf = ConfigFactory.load("application.conf")
+      val system = ActorSystem("ClusterSystem", conf)
+
+      val serviceActor = system.actorOf(
+        Props(new SimilaritySearchService(conf)), name = "similarityService")
+      system.actorOf(Props(new SimilarityWorker(conf, serviceActor)), name = "simWorker")
+    }
   }
 }

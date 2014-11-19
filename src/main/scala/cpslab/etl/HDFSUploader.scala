@@ -4,10 +4,9 @@ import java.io._
 import java.util.Properties
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem, FileStatus}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
-import org.apache.hadoop.tools.util.DistCpUtils
-import org.apache.hadoop.tools.util.ThrottledInputStream
+import org.apache.hadoop.tools.util.{DistCpUtils, ThrottledInputStream}
 import org.apache.spark.SparkContext
 
 import scala.collection.mutable.ListBuffer

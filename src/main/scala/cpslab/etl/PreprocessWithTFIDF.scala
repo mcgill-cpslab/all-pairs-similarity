@@ -1,11 +1,11 @@
 package cpslab.etl
 
-import java.io.{InputStreamReader, BufferedReader}
+import java.io.{BufferedReader, InputStreamReader}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
-import org.apache.spark.mllib.feature.{IDF, HashingTF}
+import org.apache.spark.mllib.feature.{HashingTF, IDF}
 import org.apache.spark.mllib.linalg.{Vector => SparkVector}
 import org.apache.spark.rdd.RDD
 
@@ -19,7 +19,6 @@ object PreprocessWithTFIDF {
    * @return RDD of the file content (each string per file)
    */
   def mapEachFileToSingleLine(sc: SparkContext, allFilesPath: ListBuffer[String]): RDD[String] = {
-    import org.apache.spark.SparkContext._
     var allFileContentRDD: RDD[String] = null
     val allFilesPathRDD = sc.parallelize(allFilesPath, 4)
     allFileContentRDD = allFilesPathRDD.map(sourcePathString =>  {
