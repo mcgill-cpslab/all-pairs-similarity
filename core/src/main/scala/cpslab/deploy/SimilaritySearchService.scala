@@ -6,8 +6,9 @@ import akka.cluster.ClusterEvent._
 import akka.routing.ConsistentHashingRouter.ConsistentHashMapping
 import akka.routing.FromConfig
 import com.typesafe.config.{ConfigFactory, Config}
-import cpslab.message.{DataPacket, GetInputRequest}
 import org.apache.hadoop.hbase.util.Bytes
+
+import cpslab.message.{DataPacket, GetInputRequest}
 
 class SimilaritySearchService(conf: Config) extends Actor {
 

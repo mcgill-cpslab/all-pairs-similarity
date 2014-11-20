@@ -1,22 +1,24 @@
 package cpslab.deploy
 
-import akka.actor._
-import akka.cluster.Cluster
-import akka.cluster.ClusterEvent._
-import com.typesafe.config.Config
-import cpslab.message.{DataPacket, GetInputRequest, Message}
-import cpslab.vector.{SparseVector, Vectors}
-import org.apache.hadoop.hbase.client.{HTable, Scan}
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Lock
 import scala.concurrent.duration._
 import scala.language.postfixOps
+
+import akka.actor._
+import akka.cluster.Cluster
+import akka.cluster.ClusterEvent._
+import com.typesafe.config.Config
+import org.apache.hadoop.hbase.client.{HTable, Scan}
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
+
+import cpslab.message.{DataPacket, GetInputRequest, Message}
+import cpslab.vector.{SparseVector, Vectors}
+
 
 
 class WriteWorker(input: List[SparseVector], localService: ActorRef) extends Actor {

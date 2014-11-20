@@ -1,5 +1,0 @@
-package cpslab
-
-object SystemState {
-
-}
