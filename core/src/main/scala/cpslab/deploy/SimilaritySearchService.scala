@@ -1,5 +1,7 @@
 package cpslab.deploy
 
+import java.io.File
+
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.cluster.Cluster
 import akka.cluster.ClusterEvent._
@@ -82,11 +84,19 @@ object SimilaritySearchService {
 
   def main(args: Array[String]): Unit = {
 
+    if (args.length != 3) {
+      println("Usage: program cluster_conf_path deploy_conf_path app_conf_path")
+      sys.exit(1)
+    }
+
     startup()
 
     def startup(): Unit = {
       // Override the configuration of the port when specified as program argument
-      val conf = ConfigFactory.load("application.conf")
+      val conf = ConfigFactory.load("application.conf").
+        withFallback(ConfigFactory.parseFile(new File(args(0)))).
+        withFallback(ConfigFactory.parseFile(new File(args(1)))).
+        withFallback(ConfigFactory.parseFile(new File(args(2))))
       val system = ActorSystem("ClusterSystem", conf)
 
       val serviceActor = system.actorOf(
