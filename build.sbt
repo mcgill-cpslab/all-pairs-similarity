@@ -6,7 +6,6 @@ org.scalastyle.sbt.ScalastylePlugin.Settings
 assemblySettings
 
 lazy val commonSettings = Seq(
-  name := "AllPairsSimilarity",
   version := "0.1",
   scalaVersion := "2.10.4",
   organization := "CodingCat",
@@ -46,7 +45,8 @@ lazy val core = (project in file("core")).
         .exclude("commons-collections", "commons-collections")
     ) ++ commonDependency
   ).
-  settings(assemblySettings: _*)
+  settings(assemblySettings: _*).
+  settings(name := "AllPairsSimilarityCore")
 
 
 lazy val etl = (project.dependsOn(core)).
@@ -55,9 +55,11 @@ lazy val etl = (project.dependsOn(core)).
     libraryDependencies ++= Seq(
       "org.apache.spark" % "spark-mllib_2.10" % "1.1.0",
       "org.apache.hadoop" % "hadoop-distcp" % "2.3.0",
-      "org.apache.hbase" % "hbase-protocol" % "0.98.7-hadoop2"
+      "org.apache.hbase" % "hbase-protocol" % "0.98.7-hadoop2",
+      "org.apache.hadoop" % "hadoop-client" % "2.3.0"
     ) ++ commonDependency
-  )
+  ).
+  settings(name := "AllPairsSimilarityETL")
 
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
 {

@@ -9,104 +9,16 @@ import scala.language.postfixOps
 
 import akka.actor._
 import akka.cluster.Cluster
-import akka.cluster.ClusterEvent._
 import com.typesafe.config.Config
 import org.apache.hadoop.hbase.client.{HTable, Scan}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 
-import cpslab.message.{DataPacket, GetInputRequest, Message}
+import cpslab.message.{WriteWorkerFinished, DataPacket, LoadData, Message}
 import cpslab.vector.{SparseVector, Vectors}
 
-
-
-class WriteWorker(input: List[SparseVector], localService: ActorRef) extends Actor {
-
-  import context._
-
-  case object IOTrigger
-
-  val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
-    new mutable.HashMap[Int, mutable.HashSet[Int]]
-
-  val writeBufferLock: Lock = new Lock
-
-  var parseTask: Cancellable = null
-  var writeTask: Cancellable = null
-
-  var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
-
-  override def preStart(): Unit = {
-    parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
-      def run(): Unit = {
-        parseInput
-      }
-    })
-    //TODO: make the period length configurable
-    writeTask = context.system.scheduler.schedule(0 milliseconds, 10 milliseconds, self, IOTrigger)
-  }
-
-  override def postStop(): Unit = {
-    parseTask.cancel()
-    writeTask.cancel()
-  }
-
-  private def parseInput(): Unit = {
-    for (vector <- input){
-      vectorsStore += vector
-      writeBufferLock.acquire()
-      for (nonZeroIdx <- vector.indices) {
-        writeBuffer.getOrElseUpdate(
-          nonZeroIdx,
-          new mutable.HashSet[Int]) += vectorsStore.size - 1
-      }
-      writeBufferLock.release()
-    }
-    self ! PoisonPill
-  }
-
-  override def receive: Receive = {
-    case IOTrigger =>
-      writeBufferLock.acquire()
-      for ((key, vectors) <- writeBuffer) {
-        // TODO: userId might be discarded, need to investigate the evaluation dataset
-        var vectorSet = Set[SparseVector]()
-        for (vector <- vectors) {
-          vectorSet += vectorsStore(vector)
-        }
-        // TODO: duplicate vectors may send to the same node for multiple times
-        localService ! DataPacket(key, 0, vectorSet)
-      }
-      writeBuffer.clear()
-      writeBufferLock.release()
-  }
-}
-
-class IndexingWorker extends Actor {
-
-  val cluster = Cluster(context.system)
-
-  val vectorsStore = new ListBuffer[SparseVector]
-
-  // dimentsionid => vector index
-  val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
-
-  def receive: Receive = {
-    case DataPacket(key, uid, vectors) =>
-      // save all index to the inverted index
-      for (vector <- vectors) {
-        vectorsStore += vector
-        val currentIdx = vectorsStore.size - 1
-        invertedIndex.getOrElseUpdate(key, new mutable.HashSet[Int]) += currentIdx
-      }
-      // TODO: output similar vectors
-  }
-}
-
-class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor {
-
-  import cpslab.deploy.SimilarityWorker._
+private class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor {
 
   private val vectorDim = workerConf.getInt("cpslab.allpair.vectorDim")
   private val zooKeeperQuorum = workerConf.getString("cpslab.allpair.zooKeeperQuorum")
@@ -114,16 +26,19 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
 
   private var inputVectors: List[SparseVector] = null
 
-  val writeParallelism = workerConf.getInt("cpslab.allpair.writeParallelism")
-  val indexActorNum = workerConf.getInt("cpslab.allpair.indexActorNum")
+  // the number of the child actors
+  private val writeActorNum = workerConf.getInt("cpslab.allpair.writeActorNum")
+  private val indexActorNum = workerConf.getInt("cpslab.allpair.indexActorNum")
 
-  //children
+  // children
   val indexActors = new Array[ActorRef](indexActorNum)
+  val writeActors = new mutable.HashSet[ActorRef]
+  // for fault-tolerance
   val writeWorkersToInputSet = new mutable.HashMap[ActorRef, List[SparseVector]]
 
   val cluster = Cluster(context.system)
   // listen the MemberEvent
-  cluster.subscribe(self, classOf[MemberEvent], classOf[ReachabilityEvent], classOf[DeadLetter])
+  cluster.subscribe(self, classOf[DeadLetter])
 
   val messagesToStoppedActor = new mutable.HashMap[ActorRef, ListBuffer[Message]]
 
@@ -136,7 +51,7 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
     val hTable = new HTable(hbaseConf, "inputTable")
     val scan = new Scan(startRow, endRow)
     scan.addFamily(Bytes.toBytes("info"))
-    val retVectorArray = new ListBuffer[SparseVector]
+    var retVectorArray = List[SparseVector]()
     for (result <- hTable.getScanner(scan).iterator()) {
       //convert to the vector
       val cells = result.rawCells()
@@ -148,52 +63,56 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
         sparseArray(sparseIdx) = qualifier -> value
         sparseIdx += 1
       }
-      retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
+      retVectorArray = Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector] +:
+        retVectorArray
     }
-    retVectorArray.toList
+    retVectorArray
   }
 
   override def receive: Receive = {
-    case GetInputRequest(tableName, startRow, endRow) =>
+    case LoadData(tableName, startRow, endRow) =>
       inputVectors = readFromDataBase(tableName, startRow, endRow)
-      val inputVectorLists = inputVectors.grouped(writeParallelism).toList
+      val inputVectorLists = inputVectors.grouped(writeActorNum).toList
       for (inputList <- inputVectorLists) {
-        val newWriterWorker = context.actorOf(Props(new WriteWorker(inputList, localService)))
+        val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(workerConf,
+          inputList, localService)))
+        writeActors += newWriterWorker
         context.watch(newWriterWorker)
       }
     case dp @ DataPacket(key, user, vector) =>
       if (indexActors(key % indexActorNum) == null) {
-        indexActors(key % indexActorNum) = context.actorOf(Props(new IndexingWorker))
+        indexActors(key % indexActorNum) = context.actorOf(Props(new IndexingWorkerActor))
         context.watch(indexActors(key % indexActorNum))
       }
       indexActors(key % indexActorNum) ! dp
-    case MemberUp(m) if m.hasRole("compute") =>
-      currentMemberNum += 1
-    case other: MemberEvent =>
-      currentMemberNum -= 1
-    case UnreachableMember(m) =>
-      currentMemberNum -= 1
-    case ReachableMember(m) if m.hasRole("compute") =>
-      currentMemberNum += 1
     case DeadLetter(message, sender, recipient) =>
+      // buffer the message to any dead actor
       if (message.isInstanceOf[DataPacket] && sender == self) {
         messagesToStoppedActor.getOrElseUpdate(recipient,
           new ListBuffer[Message]) += message.asInstanceOf[DataPacket]
       }
+    case WriteWorkerFinished =>
+      writeActors -= sender()
+      sender ! PoisonPill
     case Terminated(stoppedChild) =>
       // received from either WriteWorker or IndexingWorker
       var stoppedChildIndex = indexActors.indexOf(stoppedChild)
       if (stoppedChildIndex == -1) {
         // is a WriteWorker, restart it
-        val newWriterWorker = context.actorOf(
-          Props(new WriteWorker(writeWorkersToInputSet(stoppedChild), localService)))
-        context.watch(newWriterWorker)
-        //TODO: How to de-duplicate ...can be solved by persistent actor
-        writeWorkersToInputSet += newWriterWorker -> writeWorkersToInputSet(stoppedChild)
-        writeWorkersToInputSet.remove(stoppedChild)
+        if (writeActors.contains(stoppedChild)) {
+          val newWriterWorker = context.actorOf(
+            Props(new WriteWorkerActor(workerConf, writeWorkersToInputSet(stoppedChild),
+              localService)))
+          context.watch(newWriterWorker)
+          //TODO: How to de-duplicate ...can be solved by persistent actor
+          writeWorkersToInputSet += newWriterWorker -> writeWorkersToInputSet(stoppedChild)
+          writeWorkersToInputSet.remove(stoppedChild)
+          writeActors -= stoppedChild
+          writeActors += newWriterWorker
+        }
       } else {
         // is a IndexingWorker
-        indexActors(stoppedChildIndex) = context.actorOf(Props(new IndexingWorker))
+        indexActors(stoppedChildIndex) = context.actorOf(Props(new IndexingWorkerActor))
         context.watch(indexActors(stoppedChildIndex))
         //re-send the buffer data
         if (messagesToStoppedActor.contains(stoppedChild)) {
@@ -204,8 +123,4 @@ class SimilarityWorker(workerConf: Config, localService: ActorRef) extends Actor
         }
       }
   }
-}
-
-object SimilarityWorker {
-  var currentMemberNum = 1
 }
