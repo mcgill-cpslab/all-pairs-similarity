@@ -10,8 +10,6 @@ import cpslab.message.DataPacket
 import cpslab.vector.SparseVector
 
 class IndexingWorkerActor extends Actor {
-  val cluster = Cluster(context.system)
-
   val vectorsStore = new ListBuffer[SparseVector]
 
   // dimentsionid => vector index
