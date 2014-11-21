@@ -28,7 +28,7 @@ class SimilaritySearchService(conf: Config) extends Actor {
   val parallelism = conf.getInt("cpslab.allpair.parallelism")
 
   private def hashMapping: ConsistentHashMapping = {
-    case DataPacket(key, _, _) => math.abs(key)
+    case DataPacket(key, _) => math.abs(key)
     case x => x.toString
   }
 
@@ -61,9 +61,8 @@ class SimilaritySearchService(conf: Config) extends Actor {
       for (getInputRequest <- parseLoadDataRequest(table, startRowKey, endRowKey)) {
         workerRouter ! getInputRequest
       }
-    case dp @ DataPacket(_, _, _) =>
+    case dp @ DataPacket(_, _) =>
       // send out through the router
-      // TODO deduplication
       workerRouter ! dp
   }
 }

@@ -28,6 +28,8 @@ private class WriteWorkerActor(conf: Config, input: List[SparseVector],
 
   var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
 
+  // for de-duplication
+  // maxKeyRangeNum is to be set as maxKeyNode * virtualNodeFactor
   val maxKeyRangeNum = conf.getInt("cpslab.allpair.maxKeyRangeNum")
 
   override def preStart(): Unit = {
@@ -52,7 +54,7 @@ private class WriteWorkerActor(conf: Config, input: List[SparseVector],
       writeBufferLock.acquire()
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
-          nonZeroIdx,
+          nonZeroIdx % maxKeyRangeNum,
           new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()
@@ -65,13 +67,11 @@ private class WriteWorkerActor(conf: Config, input: List[SparseVector],
       writeBufferLock.acquire()
       if (!writeBuffer.isEmpty) {
         for ((key, vectors) <- writeBuffer) {
-          // TODO: userId might be discarded, need to investigate the evaluation dataset
           var vectorSet = Set[SparseVector]()
-          for (vector <- vectors) {
-            vectorSet += vectorsStore(vector)
+          for (vectorIdx <- vectors) {
+            vectorSet += vectorsStore(vectorIdx)
           }
-          // TODO: duplicate vectors may send to the same node for multiple times
-          localService ! DataPacket(key, 0, vectorSet)
+          localService ! DataPacket(key,vectorSet)
         }
         writeBuffer.clear()
       } else {

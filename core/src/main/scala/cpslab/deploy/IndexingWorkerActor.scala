@@ -18,7 +18,7 @@ class IndexingWorkerActor extends Actor {
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
   def receive: Receive = {
-    case DataPacket(key, uid, vectors) =>
+    case DataPacket(key, vectors) =>
       // save all index to the inverted index
       for (vector <- vectors) {
         vectorsStore += vector

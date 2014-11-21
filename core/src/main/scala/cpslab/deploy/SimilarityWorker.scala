@@ -79,7 +79,7 @@ private class SimilarityWorker(workerConf: Config, localService: ActorRef) exten
         writeActors += newWriterWorker
         context.watch(newWriterWorker)
       }
-    case dp @ DataPacket(key, user, vector) =>
+    case dp @ DataPacket(key, vector) =>
       if (indexActors(key % indexActorNum) == null) {
         indexActors(key % indexActorNum) = context.actorOf(Props(new IndexingWorkerActor))
         context.watch(indexActors(key % indexActorNum))
