@@ -1,4 +1,5 @@
 #!/bin/bash
 
-java -cp /root/init/AllPairsSimilarity-assembly-0.1.jar cpslab.deploy.SimilaritySearchService 
+cd app;
 
+java -cp core/target/scala-2.10/AllPairsSimilarityCore-assembly-0.1.jar cpslab.service.SimilaritySearchService conf/cluster.conf conf/deploy.conf conf/app.conf
