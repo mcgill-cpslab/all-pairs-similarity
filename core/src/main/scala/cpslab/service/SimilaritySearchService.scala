@@ -42,6 +42,8 @@ object SimilaritySearchService {
         withFallback(ConfigFactory.load())
 
       println(conf.getList("akka.cluster.seed-nodes"))
+      println(conf.getString("akka.persistence.journal.plugin"))
+      println(conf.getString("hbase-journal.hadoop-pass-through.hbase.zookeeper.quorum"))
 
       maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
       val system = ActorSystem("ClusterSystem", conf)
