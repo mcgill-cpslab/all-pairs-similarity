@@ -3,15 +3,17 @@ package cpslab.deploy.client
 import java.io.File
 
 import akka.actor.{Actor, ActorSystem, PoisonPill, Props}
-import akka.contrib.pattern.ClusterSharding
+import akka.contrib.pattern.{ShardRegion, ClusterSharding}
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.CommonUtils
 import cpslab.deploy.server.EntryProxyActor
+import cpslab.message.{LoadData, DataPacket}
 import cpslab.service.SimilaritySearchService
 import org.apache.hadoop.hbase.util.Bytes
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Random
 
 private class Client(config: Config) extends Actor {
 
@@ -67,6 +69,19 @@ private class Client(config: Config) extends Actor {
 
 object Client {
 
+  val clientActorName = "client"
+
+  // fix the entry Id to send to a proxy and then spawn to the multiple entries
+  // otherwise, it is impossible to send data packet to multiple entries just
+  // through idExtractor
+  val entryIdExtractor: ShardRegion.IdExtractor = {
+    case msg => ("EntryProxy", msg)
+  }
+
+  val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
+    case x => "1"
+  }
+
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {
       println("Usage: program cluster_conf_path deploy_conf_path app_conf_path")
@@ -90,10 +105,16 @@ object Client {
 
       ClusterSharding(system).start(
         typeName = EntryProxyActor.entryProxyActorName,
-        entryProps = Some(Props(new EntryProxyActor(conf))),
+        entryProps = None, // start the shardRegion actor in proxy mode
         idExtractor = SimilaritySearchService.entryIdExtractor,
         shardResolver = SimilaritySearchService.shardIdResolver
       )
+
+      ClusterSharding(system).start(
+        typeName = Client.clientActorName,
+        entryProps = Some(Props(new Client(conf))),
+        idExtractor = Client.entryIdExtractor,
+        shardResolver = Client.shardIdResolver)
 
       system.actorOf(Props(new Client(conf)))
       system.awaitTermination()

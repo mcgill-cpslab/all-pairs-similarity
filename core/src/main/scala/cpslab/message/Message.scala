@@ -2,6 +2,8 @@ package cpslab.message
 
 import cpslab.vector.SparseVectorWrapper
 
+import scala.collection.mutable
+
 sealed trait Message
 
 case class LoadData(tableName: String, startRow: Array[Byte], endRow: Array[Byte])
@@ -12,5 +14,8 @@ case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper])
   extends Message
 
 case class IndexData(vectors: Set[SparseVectorWrapper])
+
+case class SimilarityOutput(output: mutable.HashMap[SparseVectorWrapper,
+  mutable.HashMap[SparseVectorWrapper, Double]])
 
 case object WriteWorkerFinished extends Message

@@ -2,9 +2,11 @@ package cpslab.service
 
 import java.io.File
 
+import cpslab.deploy.client.Client
+
 import scala.util.Random
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{Props, ActorSystem}
 import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.ConfigFactory
 import cpslab.deploy.server.EntryProxyActor
@@ -56,6 +58,12 @@ object SimilaritySearchService {
         idExtractor = entryIdExtractor,
         shardResolver = shardIdResolver
       )
+
+      ClusterSharding(system).start(
+        typeName = Client.clientActorName,
+        entryProps = None, //start clientRegion in the proxy mode
+        idExtractor = Client.entryIdExtractor,
+        shardResolver = Client.shardIdResolver)
     }
   }
 }
