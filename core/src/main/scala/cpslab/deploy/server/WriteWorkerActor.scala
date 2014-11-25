@@ -40,8 +40,6 @@ private class WriteWorkerActor(conf: Config) extends Actor {
 
   var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
 
-  // for de-duplication
-  // maxKeyRangeNum is to be set as maxKeyNode * virtualNodeFactor
   val maxKeyRangeNum = conf.getInt("cpslab.allpair.maxKeyRangeNum")
 
   override def preStart(): Unit = {
@@ -65,7 +63,7 @@ private class WriteWorkerActor(conf: Config) extends Actor {
       writeBufferLock.acquire()
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
-          nonZeroIdx % maxKeyRangeNum,
+          nonZeroIdx % maxKeyRangeNum,// this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()
@@ -110,14 +108,15 @@ private class WriteWorkerActor(conf: Config) extends Actor {
     case WriteWorkerActor.IOTrigger =>
       writeBufferLock.acquire()
       if (!writeBuffer.isEmpty) {
-        for ((key, vectors) <- writeBuffer) {
-          var vectorSet = Set[SparseVectorWrapper]()
+        for ((shardId, vectors) <- writeBuffer) {
+          val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
           for (vectorIdx <- vectors) {
             val sparseVector = vectorsStore(vectorIdx)
-            vectorSet += SparseVectorWrapper(sparseVector.indices.toSet, sparseVector)
+            vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
+              filter(_ % shardId == 0), sparseVector)
           }
           clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
-            DataPacket(key, vectorSet)
+            DataPacket(shardId, vectorSet.toSet)
         }
         writeBuffer.clear()
       } else {

@@ -19,7 +19,7 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   // the generated data structure
   // entryActorId => (SparseVectorWrapper(indices to be saved by the certain entryId,
   // sparseVectorItSelf))
-  private def spawnToEntries(dp: DataPacket): mutable.HashMap[Int,
+  private def spawnToIndexActor(dp: DataPacket): mutable.HashMap[Int,
     mutable.ListBuffer[SparseVectorWrapper]] = {
     val writeBuffer = new mutable.HashMap[Int, mutable.ListBuffer[SparseVectorWrapper]]
     for (vectorToIndex <- dp.vectors) {
@@ -27,13 +27,14 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       val indexArray = new ListBuffer[Int]
       for (i <- 0 until vectorNonZeroIndexList.length) {
         val featureIdx = vectorNonZeroIndexList(i)
-        val entryKey = featureIdx % maxIndexEntryActorNum
-        writeBuffer.getOrElseUpdate(entryKey, new mutable.ListBuffer[SparseVectorWrapper])
+        //index to different indexactors
+        val indexActorIdx = featureIdx % maxIndexEntryActorNum
+        writeBuffer.getOrElseUpdate(indexActorIdx, new mutable.ListBuffer[SparseVectorWrapper])
         if (i == 0) {
-          writeBuffer(entryKey) += SparseVectorWrapper(Set[Int](),
+          writeBuffer(indexActorIdx) += SparseVectorWrapper(Set[Int](),
             vectorToIndex.sparseVector)
         }
-        writeBuffer(entryKey)(writeBuffer(entryKey).size - 1).indices += featureIdx
+        writeBuffer(indexActorIdx)(writeBuffer(indexActorIdx).size - 1).indices += featureIdx
       }
     }
     writeBuffer
@@ -50,13 +51,13 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
         context.watch(newWriterWorker)
       }
     case dp @ DataPacket(_, _) =>
-      for ((entryActorId, vectorsToSend) <- spawnToEntries(dp)) {
-        if (indexEntryActors.contains(entryActorId)) {
-          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor))
+      for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
+        if (indexEntryActors.contains(indexActorId)) {
+          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf)))
           context.watch(newEntryActor)
-          indexEntryActors += entryActorId -> newEntryActor
+          indexEntryActors += indexActorId -> newEntryActor
         }
-        indexEntryActors(entryActorId) ! IndexData(vectorsToSend.toSet)
+        indexEntryActors(indexActorId) ! IndexData(vectorsToSend.toSet)
       }
 
     case Terminated(stoppedChild) =>
