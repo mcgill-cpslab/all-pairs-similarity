@@ -1,21 +1,25 @@
 package cpslab.deploy.client
 
 import java.io.File
-import scala.concurrent.duration._
-import scala.language.postfixOps
 
-import akka.actor.{PoisonPill, Actor, Props, ActorSystem}
+import akka.actor.{Actor, ActorSystem, PoisonPill, Props}
 import akka.contrib.pattern.ClusterSharding
 import com.typesafe.config.{Config, ConfigFactory}
-
+import cpslab.deploy.CommonUtils
 import cpslab.deploy.server.EntryProxyActor
 import cpslab.service.SimilaritySearchService
+import org.apache.hadoop.hbase.util.Bytes
+
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 private class Client(config: Config) extends Actor {
 
   import context._
 
   val regionActor = ClusterSharding(context.system).shardRegion(EntryProxyActor.entryProxyActorName)
+
+  val ioRangeNum = config.getInt("cpslab.allpair.ioRangeNum")
 
   val parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
     def run(): Unit = {
@@ -36,12 +40,26 @@ private class Client(config: Config) extends Actor {
       context.system.shutdown()
   }
 
+  private def sendIOCommand(tableName: String, startKey: Array[Byte],
+                            endKey: Array[Byte]): Unit = {
+    val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName, startKey, endKey, ioRangeNum)
+    for (req <- loadDataReqs) {
+      regionActor ! loadDataReqs
+    }
+  }
+
   private def terminal(): Unit = {
     println("Terminal:")
     var cmd = ""
     while (cmd != "quit") {
+      cmd match {
+        case "start" =>
+          val tableName = Console.readLine()
+          val startKey = Bytes.toBytes(Console.readLine().toInt)
+          val endKey = Bytes.toBytes(Console.readLine().toInt)
+          sendIOCommand(tableName, startKey, endKey)
+      }
       cmd = Console.readLine()
-      println("input is %s".format(cmd))
     }
     self ! PoisonPill
   }

@@ -1,13 +1,13 @@
 package cpslab.deploy.server
 
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-
 import akka.actor._
 import com.typesafe.config.Config
+import cpslab.deploy.CommonUtils
 import cpslab.message.{DataPacket, IndexData, LoadData}
 import cpslab.vector.SparseVectorWrapper
-import org.apache.hadoop.hbase.util.Bytes
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
@@ -39,36 +39,13 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     writeBuffer
   }
 
-  private def parseLoadDataRequest(tableName: String, startRowKey: Array[Byte],
-                                   endRowKey: Array[Byte]): List[LoadData] = {
-    var loadDataRequests = List[LoadData]()
-    val startRowKeyInt = Bytes.toInt(startRowKey)
-    val endRowKeyInt = Bytes.toInt(endRowKey)
-    var newStartKeyInt = startRowKeyInt
-    var maxLength = (endRowKeyInt - startRowKeyInt + 1) / maxIOEntryActorNum
-    while (newStartKeyInt <= endRowKeyInt) {
-      val stepLength = {
-        if (newStartKeyInt + maxLength > endRowKeyInt) {
-          endRowKeyInt - newStartKeyInt + 1
-        } else {
-          (endRowKeyInt - startRowKeyInt + 1) / maxIOEntryActorNum
-        }
-      }
-      val newEndKeyInt = newStartKeyInt + stepLength - 1
-      loadDataRequests =
-        LoadData(tableName, Bytes.toBytes(newStartKeyInt), Bytes.toBytes(newEndKeyInt)) +:
-          loadDataRequests
-      newStartKeyInt = newStartKeyInt + stepLength
-    }
-    loadDataRequests
-  }
-
-
   override def receive: Receive = {
     case LoadData(tableName, startRow, endRow) =>
-      val loadRequests = parseLoadDataRequest(tableName, startRow, endRow)
+      val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
+        maxIOEntryActorNum)
       for (loadDataReq <- loadRequests) {
         val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf)))
+        newWriterWorker ! loadDataReq
         writeActors += newWriterWorker
         context.watch(newWriterWorker)
       }

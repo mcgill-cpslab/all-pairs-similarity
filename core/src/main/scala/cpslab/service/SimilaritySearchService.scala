@@ -2,12 +2,13 @@ package cpslab.service
 
 import java.io.File
 
-import akka.actor.{Actor, ActorSystem, Props}
-import akka.contrib.pattern.{ClusterSharding, ShardRegion}
-import com.typesafe.config.{Config, ConfigFactory}
-import cpslab.deploy.server.EntryProxyActor
+import scala.util.Random
 
-import cpslab.message.DataPacket
+import akka.actor.{ActorSystem, Props}
+import akka.contrib.pattern.{ClusterSharding, ShardRegion}
+import com.typesafe.config.ConfigFactory
+import cpslab.deploy.server.EntryProxyActor
+import cpslab.message.{DataPacket, LoadData}
 
 object SimilaritySearchService {
 
@@ -17,11 +18,12 @@ object SimilaritySearchService {
   // otherwise, it is impossible to send data packet to multiple entries just
   // through idExtractor
   val entryIdExtractor: ShardRegion.IdExtractor = {
-    case dp: DataPacket => ("EntryProxy", dp)
+    case msg => ("EntryProxy", msg)
   }
 
   val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
     case dp: DataPacket => (dp.shardId % maxShardNum).toString
+    case ld: LoadData => Random.nextInt(maxShardNum).toString
   }
 
 

@@ -82,7 +82,7 @@ private class WriteWorkerActor(conf: Config) extends Actor {
     val hTable = new HTable(hbaseConf, "inputTable")
     val scan = new Scan(startRow, endRow)
     scan.addFamily(Bytes.toBytes("info"))
-    var retVectorArray = List[SparseVector]()
+    val retVectorArray = new ListBuffer[SparseVector]
     for (result <- hTable.getScanner(scan).iterator()) {
       //convert to the vector
       val cells = result.rawCells()
@@ -94,10 +94,9 @@ private class WriteWorkerActor(conf: Config) extends Actor {
         sparseArray(sparseIdx) = qualifier -> value
         sparseIdx += 1
       }
-      retVectorArray = Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector] +:
-        retVectorArray
+      retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
     }
-    retVectorArray
+    retVectorArray.toList
   }
 
   override def receive: Receive = {
