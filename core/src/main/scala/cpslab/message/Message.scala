@@ -19,3 +19,5 @@ case class SimilarityOutput(output: mutable.HashMap[SparseVectorWrapper,
   mutable.HashMap[SparseVectorWrapper, Double]])
 
 case object WriteWorkerFinished extends Message
+
+case class Test(content: String) extends Message

@@ -3,7 +3,7 @@ package cpslab.deploy.server
 import akka.actor._
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils
-import cpslab.message.{DataPacket, IndexData, LoadData}
+import cpslab.message.{Test, DataPacket, IndexData, LoadData}
 import cpslab.vector.SparseVectorWrapper
 
 import scala.collection.mutable
@@ -15,6 +15,7 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   val maxIOEntryActorNum = conf.getInt("cpslab.allpair.maxIOEntryActorNum")
   val indexEntryActors = new mutable.HashMap[Int, ActorRef]
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
+  var clientActorRef: ActorRef = null
 
   // the generated data structure
   // entryActorId => (SparseVectorWrapper(indices to be saved by the certain entryId,
@@ -42,18 +43,19 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
   override def receive: Receive = {
     case LoadData(tableName, startRow, endRow) =>
+      clientActorRef = sender()
       val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
         maxIOEntryActorNum)
       for (loadDataReq <- loadRequests) {
-        val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf)))
+        val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, clientActorRef)))
         newWriterWorker ! loadDataReq
         writeActors += newWriterWorker
         context.watch(newWriterWorker)
       }
     case dp @ DataPacket(_, _) =>
       for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
-        if (indexEntryActors.contains(indexActorId)) {
-          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf)))
+        if (!indexEntryActors.contains(indexActorId)) {
+          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef)))
           context.watch(newEntryActor)
           indexEntryActors += indexActorId -> newEntryActor
         }
@@ -62,6 +64,14 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
     case Terminated(stoppedChild) =>
       //TODO: restart children
+    case t @ Test(content) =>
+      println("receiving %s".format(t))
+      if (clientActorRef == null) {
+        clientActorRef = sender()
+      }
+      val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef)))
+      context.watch(newEntryActor)
+      newEntryActor ! t
   }
 }
 

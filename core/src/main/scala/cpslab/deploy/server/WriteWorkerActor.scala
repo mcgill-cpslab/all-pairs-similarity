@@ -1,15 +1,5 @@
 package cpslab.deploy.server
 
-import akka.actor.{Actor, Cancellable}
-import akka.contrib.pattern.ClusterSharding
-import com.typesafe.config.Config
-import cpslab.message.{DataPacket, LoadData, WriteWorkerFinished}
-import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
-import org.apache.hadoop.hbase.client.{HTable, Scan}
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -17,7 +7,18 @@ import scala.concurrent.Lock
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-private class WriteWorkerActor(conf: Config) extends Actor {
+import akka.actor.{ActorRef, Actor, Cancellable}
+import akka.contrib.pattern.ClusterSharding
+import com.typesafe.config.Config
+import org.apache.hadoop.hbase.client.{HTable, Scan}
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
+
+import cpslab.message.{DataPacket, LoadData, WriteWorkerFinished}
+import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
+
+private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor {
   import context._
 
   val clusterSharding = ClusterSharding(context.system)

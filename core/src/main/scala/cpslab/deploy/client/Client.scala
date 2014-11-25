@@ -3,23 +3,22 @@ package cpslab.deploy.client
 import java.io.File
 
 import akka.actor.{Actor, ActorSystem, PoisonPill, Props}
-import akka.contrib.pattern.{ShardRegion, ClusterSharding}
+import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.CommonUtils
 import cpslab.deploy.server.EntryProxyActor
-import cpslab.message.{LoadData, DataPacket}
+import cpslab.message.{Test, SimilarityOutput}
 import cpslab.service.SimilaritySearchService
 import org.apache.hadoop.hbase.util.Bytes
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.Random
 
 private class Client(config: Config) extends Actor {
 
   import context._
 
-  val regionActor = ClusterSharding(context.system).shardRegion(EntryProxyActor.entryProxyActorName)
+  val serverRegionActor = ClusterSharding(context.system).shardRegion(EntryProxyActor.entryProxyActorName)
 
   val ioRangeNum = config.getInt("cpslab.allpair.ioRangeNum")
 
@@ -28,6 +27,10 @@ private class Client(config: Config) extends Actor {
       terminal()
     }
   })
+
+  override def preStart() = {
+    println("starting the client actor")
+  }
 
   override def postStop() = {
     println("stopped the client actor")
@@ -40,13 +43,24 @@ private class Client(config: Config) extends Actor {
       }
       context.stop(self)
       context.system.shutdown()
+    case SimilarityOutput(output) =>
+      //TODO: deduplicate
+      println(output)
+    case t @ Test(x) => println(t)
+    case x => println(x)
   }
 
+  /**
+   * separate the range into ioRangeNum pieces
+   * @param tableName the name of the table to read data from
+   * @param startKey start key value
+   * @param endKey end key value
+   */
   private def sendIOCommand(tableName: String, startKey: Array[Byte],
                             endKey: Array[Byte]): Unit = {
     val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName, startKey, endKey, ioRangeNum)
     for (req <- loadDataReqs) {
-      regionActor ! loadDataReqs
+      serverRegionActor ! req
     }
   }
 
@@ -60,6 +74,12 @@ private class Client(config: Config) extends Actor {
           val startKey = Bytes.toBytes(Console.readLine().toInt)
           val endKey = Bytes.toBytes(Console.readLine().toInt)
           sendIOCommand(tableName, startKey, endKey)
+        case "test" =>
+          val content = Console.readLine()
+          println("sending %s to %s".format(content, serverRegionActor))
+          serverRegionActor ! Test(content)
+        case x =>
+          println(x)
       }
       cmd = Console.readLine()
     }
@@ -68,19 +88,6 @@ private class Client(config: Config) extends Actor {
 }
 
 object Client {
-
-  val clientActorName = "client"
-
-  // fix the entry Id to send to a proxy and then spawn to the multiple entries
-  // otherwise, it is impossible to send data packet to multiple entries just
-  // through idExtractor
-  val entryIdExtractor: ShardRegion.IdExtractor = {
-    case msg => ("EntryProxy", msg)
-  }
-
-  val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
-    case x => "1"
-  }
 
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {
@@ -105,19 +112,12 @@ object Client {
 
       ClusterSharding(system).start(
         typeName = EntryProxyActor.entryProxyActorName,
-        entryProps = None, // start the shardRegion actor in proxy mode
+        entryProps = None, // start the server shardRegion actor in proxy mode
         idExtractor = SimilaritySearchService.entryIdExtractor,
         shardResolver = SimilaritySearchService.shardIdResolver
       )
 
-      ClusterSharding(system).start(
-        typeName = Client.clientActorName,
-        entryProps = Some(Props(new Client(conf))),
-        idExtractor = Client.entryIdExtractor,
-        shardResolver = Client.shardIdResolver)
-
       system.actorOf(Props(new Client(conf)))
-      system.awaitTermination()
     }
   }
 }

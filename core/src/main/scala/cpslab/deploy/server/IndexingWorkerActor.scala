@@ -1,23 +1,19 @@
 package cpslab.deploy.server
 
-import akka.contrib.pattern.ClusterSharding
-import cpslab.deploy.client.Client
-
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-import akka.actor.Actor
+import akka.actor.{ActorRef, Actor}
 import com.typesafe.config.Config
-import cpslab.message.{SimilarityOutput, IndexData}
+
+import cpslab.message.{Test, IndexData, SimilarityOutput}
 import cpslab.vector.SparseVectorWrapper
 
-class IndexingWorkerActor(conf: Config) extends Actor {
+class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
-
-  val clientActorRegion = ClusterSharding(context.system).shardRegion(Client.clientActorName)
 
   def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
     val sparseVector1 = vector1.sparseVector
@@ -63,6 +59,9 @@ class IndexingWorkerActor(conf: Config) extends Actor {
 
   def receive: Receive = {
     case IndexData(vectors) =>
-      clientActorRegion ! SimilarityOutput(outputSimilarItems(vectors))
+      replyTo ! SimilarityOutput(outputSimilarItems(vectors))
+    case t @ Test(_) =>
+      println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
+      replyTo ! t
   }
 }
