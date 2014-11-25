@@ -2,6 +2,7 @@ package cpslab.deploy.client
 
 import java.io.File
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import akka.actor.{PoisonPill, Actor, Props, ActorSystem}
 import akka.contrib.pattern.ClusterSharding
