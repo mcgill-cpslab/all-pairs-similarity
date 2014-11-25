@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
-import cpslab.deploy.EntryProxyActor
+import cpslab.deploy.server.EntryProxyActor
 
 import cpslab.message.DataPacket
 

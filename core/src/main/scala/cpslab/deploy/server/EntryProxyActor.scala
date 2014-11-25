@@ -1,4 +1,4 @@
-package cpslab.deploy
+package cpslab.deploy.server
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer

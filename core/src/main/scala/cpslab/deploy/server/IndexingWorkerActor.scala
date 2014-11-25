@@ -1,11 +1,11 @@
-package cpslab.deploy
-
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+package cpslab.deploy.server
 
 import akka.actor.Actor
 import cpslab.message.IndexData
 import cpslab.vector.SparseVectorWrapper
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class IndexingWorkerActor extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
