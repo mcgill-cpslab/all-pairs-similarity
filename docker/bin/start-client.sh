@@ -31,4 +31,4 @@ function start_client() {
   sleep 3
 }
 
-start_cluster codingcat/all-pairs $1
+start_client codingcat/all-pairs $1
