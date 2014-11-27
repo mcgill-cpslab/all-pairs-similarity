@@ -17,13 +17,13 @@ object SimilaritySearchService {
   // otherwise, it is impossible to send data packet to multiple entries just
   // through idExtractor
   val entryIdExtractor: ShardRegion.IdExtractor = {
-    case msg @ Test(_) => ("EntryProxy", msg)
+    case msg => ("EntryProxy", msg)
   }
 
   val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
     case dp: DataPacket => (dp.shardId % maxShardNum).toString
     case ld: LoadData => Random.nextInt(maxShardNum).toString
-    case p @ Test(_) => "1"
+    case p @ Test(_) => "1"//just for test
   }
 
 
