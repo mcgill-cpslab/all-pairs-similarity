@@ -6,9 +6,8 @@ import akka.actor.{Actor, ActorSystem, PoisonPill, Props}
 import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.CommonUtils
-import cpslab.deploy.server.EntryProxyActor
+import cpslab.deploy.server.{SimilaritySearchService, EntryProxyActor}
 import cpslab.message.{Test, SimilarityOutput}
-import cpslab.service.SimilaritySearchService
 import org.apache.hadoop.hbase.util.Bytes
 
 import scala.concurrent.duration._

@@ -1,13 +1,11 @@
-package cpslab.service
+package cpslab.deploy.server
 
 import java.io.File
 
 import akka.actor.{ActorSystem, Props}
 import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.ConfigFactory
-import cpslab.deploy.client.Client
-import cpslab.deploy.server.EntryProxyActor
-import cpslab.message.{Test, DataPacket, LoadData}
+import cpslab.message.{DataPacket, LoadData, Test}
 
 import scala.util.Random
 
