@@ -41,7 +41,7 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
 
   var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
 
-  val maxKeyRangeNum = conf.getInt("cpslab.allpair.maxKeyRangeNum")
+  val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
 
   override def preStart(): Unit = {
     val ioTriggerPeriod = conf.getInt("cpslab.allpair.ioTriggerPeriod")
@@ -64,7 +64,7 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
       writeBufferLock.acquire()
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
-          nonZeroIdx % maxKeyRangeNum,// this is the shard Id
+          nonZeroIdx % maxShardNum,// this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()
@@ -113,8 +113,10 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
           val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
           for (vectorIdx <- vectors) {
             val sparseVector = vectorsStore(vectorIdx)
+            //de-duplicate, the vector is sent to the target actor for only once
+            //but with all the indices, _ % maxShardNum == shardId
             vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
-              filter(_ % shardId == 0), sparseVector)
+              filter(_ % maxShardNum == shardId), sparseVector)
           }
           clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
             DataPacket(shardId, vectorSet.toSet)

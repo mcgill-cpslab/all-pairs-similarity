@@ -15,6 +15,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
+  //assuming the normalized vectors
   def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
     val sparseVector1 = vector1.sparseVector
     val sparseVector2 = vector2.sparseVector
@@ -27,6 +28,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
     similarity
   }
 
+  // build the inverted index with the given SparseVectorWrapper
   private def outputSimilarItems(candidateVectors: Set[SparseVectorWrapper]):
   mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
     val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
@@ -42,6 +44,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
           val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
           val sim = calculateSimilarity(similarVectorCandidate, vectorWrapper)
           if (sim >= similarityThreshold) {
+            // deduplicate
             val condition1 = outputSimSet.contains(similarVectorCandidate) &&
               outputSimSet(similarVectorCandidate).contains(vectorWrapper)
             val condition2 = outputSimSet.contains(vectorWrapper) &&

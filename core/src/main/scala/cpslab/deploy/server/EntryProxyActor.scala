@@ -24,18 +24,19 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     mutable.ListBuffer[SparseVectorWrapper]] = {
     val writeBuffer = new mutable.HashMap[Int, mutable.ListBuffer[SparseVectorWrapper]]
     for (vectorToIndex <- dp.vectors) {
-      val vectorNonZeroIndexList = vectorToIndex.indices.toList
+      val indicesVectorToBeIdentified = vectorToIndex.indices.toList
       val indexArray = new ListBuffer[Int]
-      for (i <- 0 until vectorNonZeroIndexList.length) {
-        val featureIdx = vectorNonZeroIndexList(i)
-        //index to different indexactors
-        val indexActorIdx = featureIdx % maxIndexEntryActorNum
+      for (i <- 0 until indicesVectorToBeIdentified.length) {
+        val indexVectorToBeIdentified = indicesVectorToBeIdentified(i)
+        //index to different index actors
+        val indexActorIdx = indexVectorToBeIdentified % maxIndexEntryActorNum
         writeBuffer.getOrElseUpdate(indexActorIdx, new mutable.ListBuffer[SparseVectorWrapper])
         if (i == 0) {
           writeBuffer(indexActorIdx) += SparseVectorWrapper(Set[Int](),
             vectorToIndex.sparseVector)
         }
-        writeBuffer(indexActorIdx)(writeBuffer(indexActorIdx).size - 1).indices += featureIdx
+        writeBuffer(indexActorIdx)(writeBuffer(indexActorIdx).size - 1).indices +=
+          indexVectorToBeIdentified
       }
     }
     writeBuffer
