@@ -7,11 +7,12 @@ import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.CommonUtils
 import cpslab.deploy.server.{SimilaritySearchService, EntryProxyActor}
-import cpslab.message.{Test, SimilarityOutput}
+import cpslab.message.{LoadData, DataPacket, Test, SimilarityOutput}
 import org.apache.hadoop.hbase.util.Bytes
 
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Random
 
 private class Client(config: Config) extends Actor {
 
@@ -59,6 +60,7 @@ private class Client(config: Config) extends Actor {
                             endKey: Array[Byte]): Unit = {
     val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName, startKey, endKey, ioRangeNum)
     for (req <- loadDataReqs) {
+      println("CLIENT: sending %s".format(req))
       serverRegionActor ! req
     }
   }
@@ -109,11 +111,26 @@ object Client {
 
       val system = ActorSystem("ClusterSystem", conf)
 
+      val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
+
+      // fix the entry Id to send to a proxy and then spawn to the multiple entries
+      // otherwise, it is impossible to send data packet to multiple entries just
+      // through idExtractor
+      val entryIdExtractor: ShardRegion.IdExtractor = {
+        case msg => ("EntryProxy", msg)
+      }
+
+      val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
+        case dp: DataPacket => (dp.shardId % maxShardNum).toString
+        case ld: LoadData => Random.nextInt(maxShardNum).toString
+        case p @ Test(_) => "1"//just for test
+      }
+
       ClusterSharding(system).start(
         typeName = EntryProxyActor.entryProxyActorName,
         entryProps = None, // start the server shardRegion actor in proxy mode
-        idExtractor = SimilaritySearchService.entryIdExtractor,
-        shardResolver = SimilaritySearchService.shardIdResolver
+        idExtractor = entryIdExtractor,
+        shardResolver = shardIdResolver
       )
 
       system.actorOf(Props(new Client(conf)))

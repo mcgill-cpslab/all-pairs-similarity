@@ -99,8 +99,10 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
   }
 
   override def receive: Receive = {
-    case LoadData(tableName, startRow, endRow) =>
+    case m @ LoadData(tableName, startRow, endRow) =>
+      println("WRITEWORKERACTOR: received %s".format(m))
       inputVectors = readFromDataBase(tableName, startRow, endRow)
+      println("total inputVector number:%d".format(inputVectors.size))
       parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
         def run(): Unit = {
           parseInput()

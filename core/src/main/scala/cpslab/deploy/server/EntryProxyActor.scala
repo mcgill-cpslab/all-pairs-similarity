@@ -43,7 +43,8 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   }
 
   override def receive: Receive = {
-    case LoadData(tableName, startRow, endRow) =>
+    case m @ LoadData(tableName, startRow, endRow) =>
+      println("received %s".format(m))
       clientActorRef = sender()
       val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
         maxIOEntryActorNum)
