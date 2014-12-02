@@ -79,7 +79,7 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
     hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
     hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
     val hTable = new HTable(hbaseConf, tableName)
-    println("end key:" + Bytes.toInt(endRow))
+    println("end key:" + Bytes.toLong(endRow))
     val scan = new Scan(startRow, endRow)
     scan.addFamily(Bytes.toBytes("info"))
     val retVectorArray = new ListBuffer[SparseVector]

@@ -12,8 +12,8 @@ object CommonUtils {
                                            maxRangeNum: Int): List[LoadData] = {
     // TODO: limit the minimum range
     val loadDataRequests = new ListBuffer[LoadData]
-    val startRowKeyInt = Bytes.toInt(startRowKey)
-    val endRowKeyInt = Bytes.toInt(endRowKey)
+    val startRowKeyInt = Bytes.toLong(startRowKey)
+    val endRowKeyInt = Bytes.toLong(endRowKey)
     var newStartKeyInt = startRowKeyInt
     val maxLength = (endRowKeyInt - startRowKeyInt + 1) / maxRangeNum
     while (newStartKeyInt <= endRowKeyInt) {

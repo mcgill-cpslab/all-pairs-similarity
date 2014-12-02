@@ -72,8 +72,9 @@ private class Client(config: Config) extends Actor {
       cmd match {
         case "start" =>
           val tableName = Console.readLine()
-          val startKey = Bytes.toBytes(Console.readLine().toInt)
-          val endKey = Bytes.toBytes(Console.readLine().toInt)
+          val startKey = Bytes.toBytes(Console.readLine().toLong)
+          val endKey = Bytes.toBytes(Console.readLine().toLong)
+          println("startKey: %d, endKey: %d".format(Bytes.toLong(startKey), Bytes.toLong(endKey)))
           sendIOCommand(tableName, startKey, endKey)
         case "test" =>
           val content = Console.readLine()
