@@ -24,7 +24,7 @@ function reverse_ip() {
 function start_client() {
   echo "starting all-pairs cluster"
 
-  docker run -t -i -h compute-client --dns $2 -v $BASE_DIR:/root/app -v /Users/nanzhu/code/all-pairs-similarity/data/maildir_small:/root/data $1 /bin/bash
+  docker run -t -i -h compute-client --dns $2 -v $BASE_DIR:/root/app -v /Users/nanzhu/code/all-pairs-similarity/data/maildir_small:/root/data -v /Users/nanzhu/code/spark:/root/spark $1 /bin/bash
 
   sleep 3
 }
