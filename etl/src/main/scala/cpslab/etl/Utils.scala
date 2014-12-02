@@ -1,8 +1,8 @@
 package cpslab.etl
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-
 import scala.collection.mutable.ListBuffer
+
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 object Utils {
 

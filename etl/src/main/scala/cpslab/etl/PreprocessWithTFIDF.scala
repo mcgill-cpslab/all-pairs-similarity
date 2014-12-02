@@ -2,14 +2,14 @@ package cpslab.etl
 
 import java.io.{BufferedReader, InputStreamReader}
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.feature.{HashingTF, IDF}
 import org.apache.spark.mllib.linalg.{Vector => SparkVector}
 import org.apache.spark.rdd.RDD
-
-import scala.collection.mutable.ListBuffer
 
 object PreprocessWithTFIDF {
 
