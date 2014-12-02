@@ -62,7 +62,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
 
   def receive: Receive = {
     case m @ IndexData(vectors) =>
-      println("INDEXWORKERACTOR: received %s".format(m))
+      //println("INDEXWORKERACTOR: received %s".format(m))
       replyTo ! SimilarityOutput(outputSimilarItems(vectors))
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))

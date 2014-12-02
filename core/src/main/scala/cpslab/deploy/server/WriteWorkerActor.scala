@@ -78,24 +78,31 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
     hbaseConf.set(TableInputFormat.INPUT_TABLE, tableName)
     hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
     hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
-    val hTable = new HTable(hbaseConf, "inputTable")
+    val hTable = new HTable(hbaseConf, tableName)
+    println("end key:" + Bytes.toInt(endRow))
     val scan = new Scan(startRow, endRow)
     scan.addFamily(Bytes.toBytes("info"))
     val retVectorArray = new ListBuffer[SparseVector]
-    for (result <- hTable.getScanner(scan).iterator()) {
-      //convert to the vector
-      val cells = result.rawCells()
-      val sparseArray = new Array[(Int, Double)](cells.size)
-      var sparseIdx = 0
-      for (cell <- cells) {
-        val qualifier = Bytes.toInt(CellUtil.cloneQualifier(cell))
-        val value = Bytes.toDouble(CellUtil.cloneQualifier(cell))
-        sparseArray(sparseIdx) = qualifier -> value
-        sparseIdx += 1
+    try {
+      for (result <- hTable.getScanner(scan).iterator()) {
+        //convert to the vector
+        val cells = result.rawCells()
+        val sparseArray = new Array[(Int, Double)](cells.size)
+        var sparseIdx = 0
+        for (cell <- cells) {
+          val qualifier = Bytes.toInt(CellUtil.cloneQualifier(cell))
+          val value = Bytes.toDouble(CellUtil.cloneValue(cell))
+          sparseArray(sparseIdx) = qualifier -> value
+          sparseIdx += 1
+        }
+        retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
       }
-      retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
+      retVectorArray.toList
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        retVectorArray.toList
     }
-    retVectorArray.toList
   }
 
   override def receive: Receive = {

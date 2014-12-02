@@ -15,7 +15,7 @@ object CommonUtils {
     val startRowKeyInt = Bytes.toInt(startRowKey)
     val endRowKeyInt = Bytes.toInt(endRowKey)
     var newStartKeyInt = startRowKeyInt
-    var maxLength = (endRowKeyInt - startRowKeyInt + 1) / maxRangeNum
+    val maxLength = (endRowKeyInt - startRowKeyInt + 1) / maxRangeNum
     while (newStartKeyInt <= endRowKeyInt) {
       val stepLength = {
         if (newStartKeyInt + maxLength > endRowKeyInt) {
