@@ -40,6 +40,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
         invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
           currentIdx
         val traversingList = invertedIndex(nonZeroIdxToSaveLocally)
+        //output the similar vector
         for (similarVectorCandidateIdx <- traversingList) {
           val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
           val sim = calculateSimilarity(similarVectorCandidate, vectorWrapper)
@@ -49,7 +50,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
               outputSimSet(similarVectorCandidate).contains(vectorWrapper)
             val condition2 = outputSimSet.contains(vectorWrapper) &&
               outputSimSet(vectorWrapper).contains(similarVectorCandidate)
-            if (!condition1 && ! condition2) {
+            if (!condition1 && !condition2) {
               outputSimSet.getOrElseUpdate(vectorWrapper,
                 new mutable.HashMap[SparseVectorWrapper, Double]) += similarVectorCandidate -> sim
             }

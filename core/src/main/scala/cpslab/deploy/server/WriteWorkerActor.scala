@@ -131,9 +131,6 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
             DataPacket(shardId, vectorSet.toSet)
         }
         writeBuffer.clear()
-      } else {
-        // send a PoisonPill after 10 seconds
-        context.system.scheduler.scheduleOnce(10000 milliseconds, parent, WriteWorkerFinished)
       }
       writeBufferLock.release()
   }
