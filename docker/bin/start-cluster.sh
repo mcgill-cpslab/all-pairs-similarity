@@ -26,7 +26,7 @@ function start_cluster() {
   echo "starting all-pairs cluster"
   for i in `seq 1 $WORKER_NUM`; do
     hostname="compute-node-${i}"
-    docker run -d -h $hostname --dns $2 -v $BASE_DIR:/root/app -v /Users/nanzhu/code/all-pairs-similarity/data/maildir_small:/root/data $1
+    docker run -t -i -h $hostname --dns $2 -v $BASE_DIR:/root/app -v /Users/nanzhu/code/all-pairs-similarity/data/maildir_small:/root/data $1 /bin/bash
     sleep 3
   done
   sleep 3

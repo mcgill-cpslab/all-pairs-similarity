@@ -8,6 +8,7 @@ import cpslab.vector.SparseVectorWrapper
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.util.Random
 
 class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
@@ -39,11 +40,17 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       clientActorRef = sender()
       val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
         maxIOEntryActorNum)
+      val rand = new Random(System.currentTimeMillis())
       for (loadDataReq <- loadRequests) {
-        val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, clientActorRef)))
-        newWriterWorker ! loadDataReq
-        writeActors += newWriterWorker
-        context.watch(newWriterWorker)
+        if (writeActors.size < maxIOEntryActorNum) {
+          val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, clientActorRef)))
+          newWriterWorker ! loadDataReq
+          writeActors += newWriterWorker
+          context.watch(newWriterWorker)
+        } else {
+          val writeActor = writeActors.toList.apply(rand.nextInt(writeActors.size))
+          writeActor ! loadDataReq
+        }
       }
     case dp @ DataPacket(_, _) =>
       for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {

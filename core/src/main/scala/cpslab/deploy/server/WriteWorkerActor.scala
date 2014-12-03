@@ -44,6 +44,7 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
   val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
 
   override def preStart(): Unit = {
+    println("starting WriteWorkerActor")
     val ioTriggerPeriod = conf.getInt("cpslab.allpair.ioTriggerPeriod")
     writeTask = context.system.scheduler.schedule(0 milliseconds,
       ioTriggerPeriod milliseconds, self, WriteWorkerActor.IOTrigger)
@@ -59,9 +60,10 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
   }
 
   private def parseInput(): Unit = {
+    println("parsing Input")
     for (vector <- inputVectors){
-      vectorsStore += vector
       writeBufferLock.acquire()
+      vectorsStore += vector
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum,// this is the shard Id
@@ -127,6 +129,8 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
             vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
               filter(_ % maxShardNum == shardId), sparseVector)
           }
+          println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
+            format(shardId, vectorSet.size))
           clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
             DataPacket(shardId, vectorSet.toSet)
         }

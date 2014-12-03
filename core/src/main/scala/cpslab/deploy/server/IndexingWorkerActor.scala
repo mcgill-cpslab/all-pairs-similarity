@@ -16,7 +16,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
   //assuming the normalized vectors
-  def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
+  private def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
     val sparseVector1 = vector1.sparseVector
     val sparseVector2 = vector2.sparseVector
     val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
@@ -28,11 +28,16 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
     similarity
   }
 
+  override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
+    println("restarting indexActor for %s".format(reason))
+  }
+
   // build the inverted index with the given SparseVectorWrapper
   private def outputSimilarItems(candidateVectors: Set[SparseVectorWrapper]):
   mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
     val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
       mutable.HashMap[SparseVectorWrapper, Double]]
+    println("candidateVectors size:%d".format(candidateVectors.size))
     for (vectorWrapper <- candidateVectors) {
       vectorsStore += vectorWrapper
       val currentIdx = vectorsStore.length - 1
@@ -64,6 +69,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
   def receive: Receive = {
     case m @ IndexData(vectors) =>
       //println("INDEXWORKERACTOR: received %s".format(m))
+      println("received indexdata")
       replyTo ! SimilarityOutput(outputSimilarItems(vectors))
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
