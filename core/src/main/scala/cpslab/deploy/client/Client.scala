@@ -45,7 +45,7 @@ private class Client(config: Config) extends Actor {
       context.system.shutdown()
     case SimilarityOutput(output) =>
       //TODO: deduplicate
-      println(output)
+      println(output.size)
     case t @ Test(x) => println(t)
     case x => println(x)
   }

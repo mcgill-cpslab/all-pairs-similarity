@@ -57,7 +57,7 @@ object HBaseUpLoader {
     //filtering
     val sortedFeatureArray = maxDimRDD.collect().sortWith((a, b) => a._2 > b._2)
     val filteredFeatureIndexSet =
-      new HashSet() ++ sortedFeatureArray.take((sortedFeatureArray.size * filterThreshold)).
+      new HashSet[Int]() ++ sortedFeatureArray.take(filterThreshold).
         map(_._1)
 
     //save the HadoopDataset to HBase
@@ -66,6 +66,12 @@ object HBaseUpLoader {
       for (i <- 0 until sparseVector.indices.length) {
         val index = sparseVector.indices(i)
         val value = sparseVector.values(i)
+        if (i == 0) {
+          // save the init element for every vector to avoid
+          // java.lang.IllegalArgumentException: No columns to insert
+          putObj.add(Bytes.toBytes("info"),
+            Bytes.toBytes(-1), Bytes.toBytes(-1.0))
+        }
         if (filteredFeatureIndexSet.contains(index)) {
           putObj.add(Bytes.toBytes("info"),
             Bytes.toBytes(index), Bytes.toBytes(value))

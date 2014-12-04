@@ -89,15 +89,21 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
       for (result <- hTable.getScanner(scan).iterator()) {
         //convert to the vector
         val cells = result.rawCells()
-        val sparseArray = new Array[(Int, Double)](cells.size)
-        var sparseIdx = 0
+        val sparseArray = new Array[(Int, Double)](cells.size - 1)
+        var sparseArrayIndex = 0
         for (cell <- cells) {
           val qualifier = Bytes.toInt(CellUtil.cloneQualifier(cell))
           val value = Bytes.toDouble(CellUtil.cloneValue(cell))
-          sparseArray(sparseIdx) = qualifier -> value
-          sparseIdx += 1
+          // to avoid spark etl job error, we set qualifier -1 as the init element for every
+          // vector
+          if (qualifier != -1) {
+            sparseArray(sparseArrayIndex) = qualifier -> value
+            sparseArrayIndex += 1
+          }
         }
-        retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
+        if (sparseArrayIndex != 0) {
+          retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
+        }
       }
       retVectorArray.toList
     } catch {
