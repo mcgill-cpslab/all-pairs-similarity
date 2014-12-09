@@ -1,6 +1,7 @@
 package cpslab.etl
 
 import com.typesafe.config.{Config, ConfigFactory}
+import cpslab.vector.{SparseVector, Vectors}
 import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
@@ -9,8 +10,6 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
-import cpslab.vector.{SparseVector, Vectors}
 
 import scala.collection.immutable.HashSet
 

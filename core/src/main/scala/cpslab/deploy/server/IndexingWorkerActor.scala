@@ -1,13 +1,12 @@
 package cpslab.deploy.server
 
+import akka.actor.{Actor, ActorRef}
+import com.typesafe.config.Config
+import cpslab.message.{IndexData, SimilarityOutput, Test}
+import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
+
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-
-import akka.actor.{ActorRef, Actor}
-import com.typesafe.config.Config
-
-import cpslab.message.{Test, IndexData, SimilarityOutput}
-import cpslab.vector.{SparseVector, Vectors, SparseVectorWrapper}
 
 class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
                           maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {
