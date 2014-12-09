@@ -1,14 +1,20 @@
 package cpslab.deploy.server
 
-import akka.actor._
-import com.typesafe.config.Config
-import cpslab.deploy.CommonUtils
-import cpslab.message.{Test, DataPacket, IndexData, LoadData}
-import cpslab.vector.SparseVectorWrapper
-
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConversions._
 import scala.util.Random
+
+import akka.actor._
+import com.typesafe.config.Config
+import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
+import org.apache.hadoop.hbase.client.{Scan, HTable}
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.util.Bytes
+
+import cpslab.deploy.CommonUtils
+import cpslab.message.{Test, DataPacket, IndexData, LoadData}
+import cpslab.vector.{SparseVector, Vectors, SparseVectorWrapper}
 
 class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
@@ -17,6 +23,8 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   val indexEntryActors = new mutable.HashMap[Int, ActorRef]
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
   var clientActorRef: ActorRef = null
+
+  lazy val maxWeight = readMaxWeight
 
   // the generated data structure
   // entryActorId => (SparseVectorWrapper(indices to be saved by the certain entryId,
@@ -32,6 +40,34 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       }
     }
     writeBuffer
+  }
+
+  private def readMaxWeight: mutable.HashMap[Int, Double] = {
+    val tableName = conf.getString("cpslab.allpair.rawDataTable") + "_MAX"
+    val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
+    val clientPort = conf.getString("cpslab.allpair.clientPort")
+    val hbaseConf = HBaseConfiguration.create()
+    hbaseConf.set(TableInputFormat.INPUT_TABLE, tableName)
+    hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
+    hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
+    val hTable = new HTable(hbaseConf, tableName)
+    val scan = new Scan()
+    scan.addFamily(Bytes.toBytes("info"))
+    val retVectorArray = new mutable.HashMap[Int, Double]
+    try {
+      for (result <- hTable.getScanner(scan).iterator()) {
+        //convert to the vector
+        val cell = result.rawCells()(0)
+        val dimensionIdx = Bytes.toInt(result.getRow)
+        val maxWeight = Bytes.toDouble(CellUtil.cloneValue(cell))
+        retVectorArray += dimensionIdx -> maxWeight
+      }
+      retVectorArray
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        retVectorArray
+    }
   }
 
   override def receive: Receive = {
@@ -55,7 +91,10 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     case dp @ DataPacket(_, _) =>
       for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
         if (!indexEntryActors.contains(indexActorId)) {
-          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef)))
+          // if we haven't read the max weight for each dimension, we should do that
+          // before we start hte first indexWorker
+          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
+            clientActorRef, maxWeight)))
           context.watch(newEntryActor)
           indexEntryActors += indexActorId -> newEntryActor
         }
@@ -69,7 +108,7 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       if (clientActorRef == null) {
         clientActorRef = sender()
       }
-      val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef)))
+      val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef, null)))
       context.watch(newEntryActor)
       newEntryActor ! t
   }

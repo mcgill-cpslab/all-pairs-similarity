@@ -7,16 +7,18 @@ import akka.actor.{ActorRef, Actor}
 import com.typesafe.config.Config
 
 import cpslab.message.{Test, IndexData, SimilarityOutput}
-import cpslab.vector.SparseVectorWrapper
+import cpslab.vector.{SparseVector, Vectors, SparseVectorWrapper}
 
-class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
+class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
+                          maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
   //assuming the normalized vectors
-  private def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
+  private def calculateSimilarity(vector1: SparseVectorWrapper,
+                                  vector2: SparseVectorWrapper): Double = {
     val sparseVector1 = vector1.sparseVector
     val sparseVector2 = vector2.sparseVector
     val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
@@ -26,6 +28,16 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
         sparseVector2.values(sparseVector2.indices.indexOf(idx)))
     }
     similarity
+  }
+
+  private def checkVectorIfShouldbeIndexed(candidateVector: SparseVectorWrapper): Boolean = {
+    val maxWeightedVector = {
+      val keys = candidateVector.sparseVector.indices
+      val values = maxWeightMap.filter{case (key, value) => keys.contains(key)}.values.toArray
+      SparseVectorWrapper(candidateVector.indices,
+        Vectors.sparse(keys.size, keys, values).asInstanceOf[SparseVector])
+    }
+    calculateSimilarity(maxWeightedVector, candidateVector) >= similarityThreshold
   }
 
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
@@ -39,11 +51,18 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef) extends Actor {
       mutable.HashMap[SparseVectorWrapper, Double]]
     println("candidateVectors size:%d".format(candidateVectors.size))
     for (vectorWrapper <- candidateVectors) {
-      vectorsStore += vectorWrapper
-      val currentIdx = vectorsStore.length - 1
+      //check if the vectorWrapper should be indexed
+      val shouldIndex = checkVectorIfShouldbeIndexed(vectorWrapper)
+      var currentIdx = 0
+      if (shouldIndex) {
+        vectorsStore += vectorWrapper
+        currentIdx = vectorsStore.length - 1
+      }
       for (nonZeroIdxToSaveLocally <- vectorWrapper.indices) {
-        invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
-          currentIdx
+        if (shouldIndex) {
+          invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
+            currentIdx
+        }
         val traversingList = invertedIndex(nonZeroIdxToSaveLocally)
         //output the similar vector
         for (similarVectorCandidateIdx <- traversingList) {
