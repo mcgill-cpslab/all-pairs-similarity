@@ -107,7 +107,8 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       if (clientActorRef == null) {
         clientActorRef = sender()
       }
-      val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf, clientActorRef, null)))
+      val newEntryActor = context.actorOf(
+        Props(new IndexingWorkerActor(conf, clientActorRef, null)))
       context.watch(newEntryActor)
       newEntryActor ! t
   }

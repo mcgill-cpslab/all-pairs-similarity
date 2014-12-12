@@ -18,9 +18,11 @@ object PreprocessWithTFIDF {
    * @param allFilesPath list of file path
    * @return RDD of the file content (each string per file)
    */
-  def mapEachFileToSingleLine(sc: SparkContext, allFilesPath: ListBuffer[String]): RDD[String] = {
+  def mapEachFileToSingleLine(sc: SparkContext,
+                              allFilesPath: ListBuffer[String],
+                              outputPartitionNum: Int): RDD[String] = {
     var allFileContentRDD: RDD[String] = null
-    val allFilesPathRDD = sc.parallelize(allFilesPath, 4)
+    val allFilesPathRDD = sc.parallelize(allFilesPath, outputPartitionNum)
     allFileContentRDD = allFilesPathRDD.map(sourcePathString =>  {
       val hadoopConf = new Configuration()
       val sourcePath = new Path(sourcePathString)
@@ -51,8 +53,8 @@ object PreprocessWithTFIDF {
 
   def main(args: Array[String]): Unit = {
 
-    if (args.length < 2) {
-      println("Usage: program rootPath outPath")
+    if (args.length < 3) {
+      println("Usage: program rootPath outPath partitionNum")
       sys.exit(-1)
     }
     val sc = new SparkContext()
@@ -60,7 +62,7 @@ object PreprocessWithTFIDF {
     val allFilesToProcess = new ListBuffer[String]
     Utils.getAllFilePath(rootPath.getFileSystem(sc.hadoopConfiguration),
       rootPath, allFilesToProcess)
-    val fileContentRDD = mapEachFileToSingleLine(sc, allFilesToProcess)
+    val fileContentRDD = mapEachFileToSingleLine(sc, allFilesToProcess, args(3).toInt)
     val tfidfRDD = computeTFIDFVector(sc, fileContentRDD)
     tfidfRDD.saveAsTextFile(args(1))
   }

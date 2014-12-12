@@ -29,7 +29,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
     similarity
   }
 
-  private def checkVectorIfShouldbeIndexed(candidateVector: SparseVectorWrapper): Boolean = {
+  private def checkVectorIfToBeIndexed(candidateVector: SparseVectorWrapper): Boolean = {
     val maxWeightedVector = {
       val keys = candidateVector.sparseVector.indices
       val values = maxWeightMap.filter{case (key, value) => keys.contains(key)}.values.toArray
@@ -44,51 +44,55 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
   }
 
   // build the inverted index with the given SparseVectorWrapper
-  private def outputSimilarItems(candidateVectors: Set[SparseVectorWrapper]):
+  private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]):
   mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
     val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
       mutable.HashMap[SparseVectorWrapper, Double]]
     println("candidateVectors size:%d".format(candidateVectors.size))
-    for (vectorWrapper <- candidateVectors) {
+    for (candidateVector <- candidateVectors) {
       //check if the vectorWrapper should be indexed
-      val shouldIndex = checkVectorIfShouldbeIndexed(vectorWrapper)
+      val shouldIndex = checkVectorIfToBeIndexed(candidateVector)
       var currentIdx = 0
       if (shouldIndex) {
-        vectorsStore += vectorWrapper
+        vectorsStore += candidateVector
         currentIdx = vectorsStore.length - 1
       }
-      for (nonZeroIdxToSaveLocally <- vectorWrapper.indices) {
+      for (nonZeroIdxToSaveLocally <- candidateVector.indices) {
         if (shouldIndex) {
           invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
             currentIdx
         }
-        val traversingList = invertedIndex(nonZeroIdxToSaveLocally)
-        //output the similar vector
-        for (similarVectorCandidateIdx <- traversingList) {
-          val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
-          val sim = calculateSimilarity(similarVectorCandidate, vectorWrapper)
-          if (sim >= similarityThreshold) {
-            // deduplicate
-            val condition1 = outputSimSet.contains(similarVectorCandidate) &&
-              outputSimSet(similarVectorCandidate).contains(vectorWrapper)
-            val condition2 = outputSimSet.contains(vectorWrapper) &&
-              outputSimSet(vectorWrapper).contains(similarVectorCandidate)
-            if (!condition1 && !condition2) {
-              outputSimSet.getOrElseUpdate(vectorWrapper,
-                new mutable.HashMap[SparseVectorWrapper, Double]) += similarVectorCandidate -> sim
-            }
-          }
-        }
+        val similarVectors = querySimilarVectors(candidateVector,
+          invertedIndex(nonZeroIdxToSaveLocally))
+        // TODO: need to deduplicate
+        outputSimSet.getOrElseUpdate(candidateVector,
+          new mutable.HashMap[SparseVectorWrapper, Double]) ++= similarVectors
       }
     }
     outputSimSet
+  }
+
+  // get the vectors which are similar to the query vector from the given list
+  private def querySimilarVectors(queryVector: SparseVectorWrapper,
+                                  candidateList: mutable.HashSet[Int]):
+  List[(SparseVectorWrapper, Double)] = {
+    val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
+    //output the similar vector
+    for (similarVectorCandidateIdx <- candidateList) {
+      val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
+      val sim = calculateSimilarity(similarVectorCandidate, queryVector)
+      if (sim >= similarityThreshold) {
+        similarityHashMap += similarVectorCandidate -> sim
+      }
+    }
+    similarityHashMap.toList
   }
 
   def receive: Receive = {
     case m @ IndexData(vectors) =>
       //println("INDEXWORKERACTOR: received %s".format(m))
       println("received indexdata")
-      replyTo ! SimilarityOutput(outputSimilarItems(vectors))
+      replyTo ! SimilarityOutput(querySimilarItems(vectors))
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
       replyTo ! t

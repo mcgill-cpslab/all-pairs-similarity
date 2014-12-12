@@ -18,7 +18,8 @@ private class Client(config: Config) extends Actor {
 
   import context._
 
-  val serverRegionActor = ClusterSharding(context.system).shardRegion(EntryProxyActor.entryProxyActorName)
+  val serverRegionActor = ClusterSharding(context.system).
+    shardRegion(EntryProxyActor.entryProxyActorName)
 
   val ioRangeNum = config.getInt("cpslab.allpair.ioRangeNum")
 
@@ -27,14 +28,6 @@ private class Client(config: Config) extends Actor {
       terminal()
     }
   })
-
-  override def preStart() = {
-    println("starting the client actor")
-  }
-
-  override def postStop() = {
-    println("stopped the client actor")
-  }
 
   override def receive: Receive = {
     case PoisonPill =>

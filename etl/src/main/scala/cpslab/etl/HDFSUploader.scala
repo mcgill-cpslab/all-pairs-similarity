@@ -25,19 +25,21 @@ object HDFSUploader {
   private val backupMaxRate = 8388608
 
   def getFileType(fileStatus: FileStatus): String = {
-    if (fileStatus == null)
+    if (fileStatus == null) {
       "N/A"
-    else {
-      if (fileStatus.isDirectory)
+    } else {
+      if (fileStatus.isDirectory) {
         "dir"
-      else
+      } else {
         "file"
+      }
     }
   }
 
   def checkFileType(sourceFileStatus: FileStatus, targetFileStatus: FileStatus): Boolean = {
     try {
-      if (targetFileStatus != null && (targetFileStatus.isDirectory != sourceFileStatus.isDirectory)) {
+      if (targetFileStatus != null &&
+        targetFileStatus.isDirectory != sourceFileStatus.isDirectory) {
         throw new IOException("Can't replace " + targetFileStatus.getPath + ". Target is " +
           getFileType(targetFileStatus) + ", Source is " + getFileType(sourceFileStatus))
       }
@@ -49,9 +51,64 @@ object HDFSUploader {
     }
   }
 
-  def doBackup(sourceFs: FileSystem, targetFs: FileSystem, sourceFileStatus: FileStatus,
+  /**
+   * create a bufferedOutputStream given the sourceFullPath, target FileSystem and
+   * target Path
+   * @param sourceFullPath
+   * @param targetFs
+   * @param targetPath
+   * @return the bufferedOutputStream instance
+   */
+  private def createBufferedOutputStream(sourceFullPath: String, targetFs: FileSystem,
+                  targetPath: Path): BufferedOutputStream = {
+    val tmpTargetPath =
+      new Path(workTargetURL.toString + "/" + sourceFullPath)
+    // leave Progressable parameter as null
+    // by reading the implementation of HDFS, I found that there is always a null guard to check
+    // if progressable is null,
+    // if yes, then it will never be called
+    // copy to tmp file
+    new BufferedOutputStream(targetFs.create(
+      tmpTargetPath, true, backupBufferSize.toInt,
+      targetFs.getDefaultReplication(targetPath),
+      targetFs.getDefaultBlockSize(targetPath), null))
+  }
+
+  // run the bytes flow
+  private def doBackupInternal(sourceFs: FileSystem, targetFs: FileSystem,
+                               sourcePath: Path, targetPath: Path): Int = {
+    val sourceFullPath = sourcePath.toString.substring(
+      sourceFs.getUri.toString.length, sourcePath.toString.length)
+    var totalBytesRead = 0
+    var inStream: ThrottledInputStream = null
+    var outStream: BufferedOutputStream = null
+    try {
+      inStream = new ThrottledInputStream(new BufferedInputStream(sourceFs.open(sourcePath)),
+        backupMaxRate.toLong)
+      outStream = createBufferedOutputStream(sourceFullPath, targetFs, targetPath)
+      val buffer = new Array[Byte](8 * 1024)
+      var bytesRead = inStream.read(buffer)
+      while (bytesRead >= 0) {
+        totalBytesRead += bytesRead
+        outStream.write(buffer, 0, bytesRead)
+        bytesRead = inStream.read(buffer)
+      }
+    } finally {
+      IOUtils.cleanup(null, outStream, inStream)
+    }
+    totalBytesRead
+  }
+
+  /**
+   * real working function to save data to the target directory in an atomic manner
+   * @param sourceFs the source file system
+   * @param targetFs the target file system
+   * @param sourcePath the source path
+   * @param targetPath the target path
+   */
+  def doBackup(sourceFs: FileSystem, targetFs: FileSystem, sourcePath: Path,
                targetPath: Path): Unit = {
-    val sourcePath = sourceFileStatus.getPath
+    val sourceFileStatus = sourceFs.getFileStatus(sourcePath)
     val sourceFullPath = sourcePath.toString.substring(
       sourceFs.getUri.toString.length, sourcePath.toString.length)
     if (sourceFileStatus.isDirectory) {
@@ -64,35 +121,10 @@ object HDFSUploader {
           e.printStackTrace()
       }
     } else {
-      val tmpTargetPath =
-        new Path(workTargetURL.toString + "/" + sourceFullPath)
-      // leave Progressable parameter as null
-      // by reading the implementation of HDFS, I found that there is always a null guard to check
-      // if progressable is null,
-      // if yes, then it will never be called
-      // copy to tmp file
-      val outStream: OutputStream = new BufferedOutputStream(targetFs.create(
-        tmpTargetPath, true, backupBufferSize.toInt,
-        targetFs.getDefaultReplication(targetPath),
-        targetFs.getDefaultBlockSize(targetPath), null))
-      var inStream: ThrottledInputStream = null
-      var totalBytesRead = 0
-      try {
-        inStream = new ThrottledInputStream(new BufferedInputStream(sourceFs.open(sourcePath)),
-          backupMaxRate.toLong)
-        val buffer = new Array[Byte](8 * 1024)
-        var bytesRead = inStream.read(buffer)
-        while (bytesRead >= 0) {
-          totalBytesRead += bytesRead
-          outStream.write(buffer, 0, bytesRead)
-          bytesRead = inStream.read(buffer)
-        }
-      } finally {
-        IOUtils.cleanup(null, outStream, inStream)
-      }
+      val totalBytesRead = doBackupInternal(sourceFs, targetFs, sourcePath, targetPath)
       // check the legacy of the tmp files
       // first file length
-      if (totalBytesRead != sourceFs.getFileStatus(sourcePath).getLen) {
+      if (totalBytesRead != sourceFileStatus.getLen) {
         throw new IOException("Mismatch in length of source:%s and target:%s".format(sourcePath,
           targetPath.toString))
       }
@@ -100,7 +132,8 @@ object HDFSUploader {
       // if empty file, just skip it
       if (totalBytesRead != 0) {
         if (!DistCpUtils.checksumsAreEqual(sourceFs, sourcePath, targetFs, targetPath)) {
-          throw new IOException("Check-sum mismatch between %s and %s".format(sourcePath, targetPath) )
+          throw
+            new IOException("Check-sum mismatch between %s and %s".format(sourcePath, targetPath))
         }
       }
     }
@@ -133,7 +166,7 @@ object HDFSUploader {
         val sourceFileStatus = sourceFs.getFileStatus(sourcePath)
         val targetPath = new Path(workTargetURL + "/" + sourceFileFullPath)
         val targetFs: FileSystem = targetPath.getFileSystem(hadoopConf)
-        doBackup(sourceFs, targetFs, sourceFileStatus, targetPath)
+        doBackup(sourceFs, targetFs, sourcePath, targetPath)
       })
       // atomic moving
       val sourcePath = new Path(workTargetURL)

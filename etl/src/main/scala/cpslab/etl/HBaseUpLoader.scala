@@ -15,9 +15,13 @@ import scala.collection.immutable.HashSet
 
 object HBaseUpLoader {
 
-  private def saveToHBase(config: Config, inputRDD: RDD[String], outputTable: String,
-                          filterThreshold: Int ): Unit = {
-    import org.apache.spark.SparkContext._
+  /**
+   * create job instance with typesafe config instance
+   * @param config the input typesafe config instance
+   * @return job instance to output hbase table
+   */
+  private def createJobInstance(config: Config): Job = {
+    val outputTable = config.getString("cpslab.allpair.outputTable")
     val zooKeeperQuorum = config.getString("cpslab.cluster.hbase.zookeeperQuorum")
     val clientPort = config.getString("cpslab.cluster.hbase.clientPort")
     val hbaseConf = HBaseConfiguration.create()
@@ -26,6 +30,18 @@ object HBaseUpLoader {
     hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
     val job = Job.getInstance(hbaseConf)
     job.setOutputFormatClass(classOf[TableOutputFormat[Put]])
+    job
+  }
+
+  /**
+   * save HDFS file representing the feature vector to HBase
+   * @param config the config file
+   * @param inputRDD vector RDD
+   * @param filterThreshold the threshold used to filter the unusual vector dimensions
+   */
+  private def saveToHBase(config: Config, inputRDD: RDD[String],
+                          filterThreshold: Int): Unit = {
+    import org.apache.spark.SparkContext._
     val vectorRDD = {
       inputRDD.zipWithIndex().map { case (vectorString, uniqueId) =>
         val putObj = new Put(Bytes.toBytes(uniqueId))
@@ -45,15 +61,9 @@ object HBaseUpLoader {
       putObj.add(Bytes.toBytes("info"), Bytes.toBytes("maxValue"), Bytes.toBytes(value))
       (new ImmutableBytesWritable, putObj)
     }}
-    val hbaseConf1 = HBaseConfiguration.create()
-    hbaseConf1.set(TableOutputFormat.OUTPUT_TABLE, outputTable + "_MAX")
-    hbaseConf1.set("hbase.zookeeper.quorum", zooKeeperQuorum)
-    hbaseConf1.set("hbase.zookeeper.property.clientPort", clientPort)
-    val job1 = Job.getInstance(hbaseConf1)
-    job1.setOutputFormatClass(classOf[TableOutputFormat[Put]])
-    maxDimOutRDD.saveAsNewAPIHadoopDataset(job1.getConfiguration)
+    maxDimOutRDD.saveAsNewAPIHadoopDataset(createJobInstance(config).getConfiguration)
 
-    //filtering
+    //filtering the unusual dimensions
     val sortedFeatureArray = maxDimRDD.collect().sortWith((a, b) => a._2 > b._2)
     val filteredFeatureIndexSet =
       new HashSet[Int]() ++ sortedFeatureArray.take(filterThreshold).
@@ -77,12 +87,12 @@ object HBaseUpLoader {
         }
       }
       (new ImmutableBytesWritable, putObj)
-    }.saveAsNewAPIHadoopDataset(job.getConfiguration)
+    }.saveAsNewAPIHadoopDataset(createJobInstance(config).getConfiguration)
   }
 
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
-      println("usage: inputDir tableName threshold")
+      println("usage: inputDir threshold")
       sys.exit(1)
     }
     val sc = new SparkContext()
@@ -90,6 +100,6 @@ object HBaseUpLoader {
     val inputFileRDD = sc.textFile(args(0))
     val config = ConfigFactory.parseString("cpslab.cluster.hbase.zookeeperQuorum=master\n" +
       "cpslab.cluster.hbase.clientPort=2181")
-    saveToHBase(config, inputFileRDD, args(1), args(2).toInt)
+    saveToHBase(config, inputFileRDD, args(1).toInt)
   }
 }
