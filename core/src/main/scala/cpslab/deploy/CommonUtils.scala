@@ -44,11 +44,11 @@ object CommonUtils {
   }
 
   private[deploy] def startShardingSystem(entryProps: Option[Props],
-                                          args: String *): (Config, ActorSystem) = {
+                                          akkaConfPath: String,
+                                          appConfPath: String): (Config, ActorSystem) = {
 
-    val conf = ConfigFactory.parseFile(new File(args(0))).
-      withFallback(ConfigFactory.parseFile(new File(args(1)))).
-      withFallback(ConfigFactory.parseFile(new File(args(2)))).
+    val conf = ConfigFactory.parseFile(new File(akkaConfPath)).
+      withFallback(ConfigFactory.parseFile(new File(appConfPath))).
       withFallback(ConfigFactory.load())
 
     startShardingSystem(entryProps, conf)

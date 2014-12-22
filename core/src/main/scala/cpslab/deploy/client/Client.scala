@@ -83,12 +83,13 @@ private class Client(config: Config) extends Actor {
 object Client {
 
   def main(args: Array[String]): Unit = {
-    if (args.length != 3) {
-      println("Usage: program cluster_conf_path deploy_conf_path app_conf_path")
+    if (args.length != 2) {
+      println("Usage: program akka_conf_path app_conf_path")
       sys.exit(1)
     }
 
-    val (conf, system) = CommonUtils.startShardingSystem(None, args(0), args(1), args(2))
+    val (conf, system) = CommonUtils.startShardingSystem(None, akkaConfPath = args(0),
+      appConfPath = args(1))
     system.actorOf(Props(new Client(conf)))
   }
 }
