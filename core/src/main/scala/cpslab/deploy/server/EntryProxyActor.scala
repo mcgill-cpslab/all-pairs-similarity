@@ -1,5 +1,10 @@
 package cpslab.deploy.server
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+import scala.util.Random
+
 import akka.actor._
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils
@@ -9,11 +14,6 @@ import org.apache.hadoop.hbase.client.{HTable, Scan}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-import scala.util.Random
 
 class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 

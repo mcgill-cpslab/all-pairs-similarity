@@ -1,9 +1,9 @@
 package cpslab.message
 
+import scala.collection.mutable
+
 import akka.actor.ActorRef
 import cpslab.vector.SparseVectorWrapper
-
-import scala.collection.mutable
 
 sealed trait Message
 
