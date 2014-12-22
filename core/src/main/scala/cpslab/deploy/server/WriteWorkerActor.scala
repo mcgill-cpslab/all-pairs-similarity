@@ -30,6 +30,7 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
   // the number of the child actors
   private val writeActorNum = conf.getInt("cpslab.allpair.writeActorNum")
 
+  // shardId -> vectorIndex
   val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
     new mutable.HashMap[Int, mutable.HashSet[Int]]
 
@@ -136,8 +137,9 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
           }
           println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
             format(shardId, vectorSet.size))
+          // shardRegionActor does not need to know the clientActor address
           clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
-            DataPacket(shardId, vectorSet.toSet)
+            DataPacket(shardId, vectorSet.toSet, clientActor)
         }
         writeBuffer.clear()
       }

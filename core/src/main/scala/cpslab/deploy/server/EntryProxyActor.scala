@@ -21,7 +21,6 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   val maxIOEntryActorNum = conf.getInt("cpslab.allpair.maxIOEntryActorNum")
   val indexEntryActors = new mutable.HashMap[Int, ActorRef]
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
-  var clientActorRef: ActorRef = null
 
   lazy val maxWeight = readMaxWeight
 
@@ -72,13 +71,12 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   override def receive: Receive = {
     case m @ LoadData(tableName, startRow, endRow) =>
       println("received %s".format(m))
-      clientActorRef = sender()
       val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
         maxIOEntryActorNum)
       val rand = new Random(System.currentTimeMillis())
       for (loadDataReq <- loadRequests) {
         if (writeActors.size < maxIOEntryActorNum) {
-          val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, clientActorRef)))
+          val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
           newWriterWorker ! loadDataReq
           writeActors += newWriterWorker
           context.watch(newWriterWorker)
@@ -87,13 +85,14 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
           writeActor ! loadDataReq
         }
       }
-    case dp @ DataPacket(_, _) =>
+    case dp @ DataPacket(_, _, clientActor) =>
       for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
         if (!indexEntryActors.contains(indexActorId)) {
           // if we haven't read the max weight for each dimension, we should do that
-          // before we start hte first indexWorker
+          // before we start the first indexWorker, implemented with lazy evaluation
+          // in the definition of maxWeight
           val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
-            clientActorRef, maxWeight)))
+            clientActor, maxWeight)))
           context.watch(newEntryActor)
           indexEntryActors += indexActorId -> newEntryActor
         }
@@ -104,11 +103,8 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       //TODO: restart children
     case t @ Test(content) =>
       println("receiving %s".format(t))
-      if (clientActorRef == null) {
-        clientActorRef = sender()
-      }
       val newEntryActor = context.actorOf(
-        Props(new IndexingWorkerActor(conf, clientActorRef, null)))
+        Props(new IndexingWorkerActor(conf, sender(), null)))
       context.watch(newEntryActor)
       newEntryActor ! t
   }
