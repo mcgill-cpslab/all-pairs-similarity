@@ -138,7 +138,6 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
           }
           println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
             format(shardId, vectorSet.size))
-          // shardRegionActor does not need to know the clientActor address
           clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
             DataPacket(shardId, vectorSet.toSet, clientActor)
         }
