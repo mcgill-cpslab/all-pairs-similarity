@@ -15,12 +15,13 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 
-class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
+private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
   val writeActors = new mutable.HashSet[ActorRef]
   val maxIOEntryActorNum = conf.getInt("cpslab.allpair.maxIOEntryActorNum")
   val indexEntryActors = new mutable.HashMap[Int, ActorRef]
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
+  val rand = new Random(System.currentTimeMillis())
 
   lazy val maxWeight = readMaxWeight
 
@@ -70,19 +71,20 @@ class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
   override def receive: Receive = {
     case m @ LoadData(tableName, startRow, endRow) =>
-      println("received %s".format(m))
+      log.info("received %s".format(m))
       val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
         maxIOEntryActorNum)
-      val rand = new Random(System.currentTimeMillis())
       for (loadDataReq <- loadRequests) {
+        var targetWriterWorker: ActorRef = null
         if (writeActors.size < maxIOEntryActorNum) {
-          val newWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
-          newWriterWorker ! loadDataReq
-          writeActors += newWriterWorker
-          context.watch(newWriterWorker)
+          targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
+          writeActors += targetWriterWorker
+          context.watch(targetWriterWorker)
         } else {
-          val writeActor = writeActors.toList.apply(rand.nextInt(writeActors.size))
-          writeActor ! loadDataReq
+          targetWriterWorker = writeActors.toList.apply(rand.nextInt(writeActors.size))
+        }
+        if (targetWriterWorker != null) {
+          targetWriterWorker ! loadDataReq
         }
       }
     case dp @ DataPacket(_, _, clientActor) =>

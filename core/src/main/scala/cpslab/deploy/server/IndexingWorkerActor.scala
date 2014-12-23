@@ -77,7 +77,7 @@ class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
                                   candidateList: mutable.HashSet[Int]):
   List[(SparseVectorWrapper, Double)] = {
     val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
-    //output the similar vector
+    // output the similar vector
     for (similarVectorCandidateIdx <- candidateList) {
       val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
       val sim = calculateSimilarity(similarVectorCandidate, queryVector)

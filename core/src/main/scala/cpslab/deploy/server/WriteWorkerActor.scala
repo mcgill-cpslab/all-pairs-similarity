@@ -1,15 +1,5 @@
 package cpslab.deploy.server
 
-import akka.actor.{Actor, ActorRef, Cancellable}
-import akka.contrib.pattern.ClusterSharding
-import com.typesafe.config.Config
-import cpslab.message.{DataPacket, LoadData}
-import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
-import org.apache.hadoop.hbase.client.{HTable, Scan}
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -17,7 +7,18 @@ import scala.concurrent.Lock
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor {
+import akka.actor.{ActorLogging, Actor, ActorRef, Cancellable}
+import akka.contrib.pattern.ClusterSharding
+import com.typesafe.config.Config
+import org.apache.hadoop.hbase.client.{HTable, Scan}
+import org.apache.hadoop.hbase.mapreduce.TableInputFormat
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
+
+import cpslab.message.{DataPacket, LoadData}
+import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
+
+private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor with ActorLogging {
   import context._
 
   val clusterSharding = ClusterSharding(context.system)
@@ -115,9 +116,9 @@ private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Acto
 
   override def receive: Receive = {
     case m @ LoadData(tableName, startRow, endRow) =>
-      println("WRITEWORKERACTOR: received %s".format(m))
+      log.info("WRITEWORKERACTOR %s: received %s".format(self, m))
       inputVectors = readFromDataBase(tableName, startRow, endRow)
-      println("total inputVector number:%d".format(inputVectors.size))
+      log.info("total inputVector number:%d".format(inputVectors.size))
       parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
         def run(): Unit = {
           parseInput()
