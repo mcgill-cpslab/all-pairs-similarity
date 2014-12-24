@@ -44,6 +44,7 @@ with ActorLogging {
   var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
 
   val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
+  val mode = conf.getString("cpslab.allpair.runMode")
 
   override def preStart(): Unit = {
     println("starting WriteWorkerActor")
@@ -83,8 +84,15 @@ with ActorLogging {
     hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
     hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
     val hTable = new HTable(hbaseConf, tableName)
-    println("end key:" + Bytes.toLong(endRow))
-    val scan = new Scan(startRow, endRow)
+    val scan = {
+      if (mode == "PRODUCT") {
+        new Scan(startRow, endRow)
+      } else {
+        val startRowStr = Bytes.toInt(startRow).toString
+        val endRowStr = Bytes.toInt(endRow).toString
+        new Scan(Bytes.toBytes(startRowStr), Bytes.toBytes(endRowStr))
+      }
+    }
     scan.addFamily(Bytes.toBytes("info"))
     val retVectorArray = new ListBuffer[SparseVector]
     try {
@@ -94,8 +102,20 @@ with ActorLogging {
         val sparseArray = new Array[(Int, Double)](cells.size - 1)
         var sparseArrayIndex = 0
         for (cell <- cells) {
-          val qualifier = Bytes.toInt(CellUtil.cloneQualifier(cell))
-          val value = Bytes.toDouble(CellUtil.cloneValue(cell))
+          val qualifier = {
+            if (mode == "PRODUCT") {
+              Bytes.toInt(CellUtil.cloneQualifier(cell))
+            } else {
+              Bytes.toString(CellUtil.cloneQualifier(cell)).toInt
+            }
+          }
+          val value = {
+            if (mode == "PRODUCT") {
+              Bytes.toDouble(CellUtil.cloneValue(cell))
+            } else {
+              Bytes.toString(CellUtil.cloneValue(cell)).toDouble
+            }
+          }
           // to avoid spark etl job error, we set qualifier -1 as the init element for every
           // vector
           if (qualifier != -1) {
@@ -104,7 +124,13 @@ with ActorLogging {
           }
         }
         if (sparseArrayIndex != 0) {
-          retVectorArray += Vectors.sparse(vectorDim, sparseArray).asInstanceOf[SparseVector]
+          retVectorArray += Vectors.sparse(vectorDim, {
+            if (mode == "PRODUCT") {
+              sparseArray
+            } else {
+              sparseArray.sortWith((a, b) => a._1 < b._1)
+            }
+          }).asInstanceOf[SparseVector]
         }
       }
       retVectorArray.toList

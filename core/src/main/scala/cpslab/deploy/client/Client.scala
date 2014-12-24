@@ -49,7 +49,11 @@ private class Client(config: Config) extends Actor {
    */
   private def sendIOCommand(tableName: String, startKey: Array[Byte],
                             endKey: Array[Byte]): Unit = {
-    val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName, startKey, endKey, ioRangeNum)
+    import Client._
+    val startKeyInt = Bytes.toString(startKey).toInt
+    val endKeyInt = Bytes.toString(endKey).toInt
+    val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName,
+      Bytes.toBytes(startKeyInt), Bytes.toBytes(endKeyInt), ioRangeNum)
     for (req <- loadDataReqs) {
       println("CLIENT: sending %s".format(req))
       serverRegionActor ! req
@@ -57,15 +61,27 @@ private class Client(config: Config) extends Actor {
   }
 
   private def terminal(): Unit = {
+    import Client._
     println("Terminal:")
     var cmd = ""
     while (cmd != "quit") {
       cmd match {
         case "start" =>
           val tableName = Console.readLine()
-          val startKey = Bytes.toBytes(Console.readLine().toLong)
-          val endKey = Bytes.toBytes(Console.readLine().toLong)
-          println("startKey: %d, endKey: %d".format(Bytes.toLong(startKey), Bytes.toLong(endKey)))
+          val startKey = {
+            if (mode == "PRODUCT") {
+              Bytes.toBytes(Console.readLine().toLong)
+            } else {
+              Bytes.toBytes(Console.readLine())
+            }
+          }
+          val endKey = {
+            if (mode == "PRODUCT") {
+              Bytes.toBytes(Console.readLine().toLong)
+            } else {
+              Bytes.toBytes(Console.readLine())
+            }
+          }
           sendIOCommand(tableName, startKey, endKey)
         case "test" =>
           val content = Console.readLine()
@@ -82,7 +98,10 @@ private class Client(config: Config) extends Actor {
 
 object Client {
 
+  var mode: String = null
+
   def main(args: Array[String]): Unit = {
+
     if (args.length != 2) {
       println("Usage: program akka_conf_path app_conf_path")
       sys.exit(1)
@@ -90,6 +109,7 @@ object Client {
 
     val (conf, system) = CommonUtils.startShardingSystem(None, akkaConfPath = args(0),
       appConfPath = args(1))
+    mode = conf.getString("cpslab.allpair.runMode")
     system.actorOf(Props(new Client(conf)))
   }
 }

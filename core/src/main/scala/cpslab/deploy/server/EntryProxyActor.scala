@@ -22,6 +22,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   val indexEntryActors = new mutable.HashMap[Int, ActorRef]
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
   val rand = new Random(System.currentTimeMillis())
+  val mode = conf.getString("cpslab.allpair.runMode")
 
   lazy val maxWeight = readMaxWeight
 
@@ -57,8 +58,20 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       for (result <- hTable.getScanner(scan).iterator()) {
         //convert to the vector
         val cell = result.rawCells()(0)
-        val dimensionIdx = Bytes.toInt(result.getRow)
-        val maxWeight = Bytes.toDouble(CellUtil.cloneValue(cell))
+        val dimensionIdx = {
+          if (mode == "PRODUCT") {
+            Bytes.toInt(result.getRow)
+          } else {
+            Bytes.toString(result.getRow).toInt
+          }
+        }
+        val maxWeight = {
+          if (mode == "PRODUCT") {
+            Bytes.toDouble(CellUtil.cloneValue(cell))
+          } else {
+            Bytes.toString(CellUtil.cloneValue(cell)).toDouble
+          }
+        }
         retVectorArray += dimensionIdx -> maxWeight
       }
       retVectorArray
