@@ -18,7 +18,8 @@ import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 import cpslab.message.{DataPacket, LoadData}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 
-private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor with ActorLogging {
+private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor
+with ActorLogging {
   import context._
 
   val clusterSharding = ClusterSharding(context.system)

@@ -1,5 +1,7 @@
 package cpslab.etl
 
+import java.io.File
+
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.vector.{SparseVector, Vectors}
 import org.apache.hadoop.hbase.HBaseConfiguration
@@ -15,15 +17,74 @@ import scala.collection.immutable.HashSet
 
 object HBaseUpLoader {
 
+  var mode: String = null
+  var filteredFeatureIndexSet: HashSet[Int] = null
+
+  private def generateMaxPutKVPair(inputPair: Option[(Int, Double)]):
+    Option[(ImmutableBytesWritable, Put)] = {
+    inputPair.map{case (index, maxValue) => {
+      val putObj: Put = {
+        if (mode == "PRODUCT") {
+          val putObj = new Put(Bytes.toBytes(index))
+          putObj.add(Bytes.toBytes("info"), Bytes.toBytes("maxValue"), Bytes.toBytes(maxValue))
+          putObj
+        } else {
+          val putObj = new Put(Bytes.toBytes(index.toString))
+          putObj.add(Bytes.toBytes("info"), Bytes.toBytes("maxValue"),
+            Bytes.toBytes(maxValue.toString))
+          putObj
+        }
+      }
+      (new ImmutableBytesWritable, putObj)
+    }}
+  }
+
+  private def generatePutKVPair(inputPair: Option[(SparseVector, Long)]):
+    Option[(ImmutableBytesWritable, Put)] = {
+    inputPair.map { case (sparseVector, uniqueId) =>
+      val putObj = {
+        if (mode == "PRODUCT") {
+          new Put(Bytes.toBytes(uniqueId))
+        } else {
+          new Put(Bytes.toBytes(uniqueId.toString))
+        }
+      }
+      for (i <- 0 until sparseVector.indices.length) {
+        val index = sparseVector.indices(i)
+        val value = sparseVector.values(i)
+        if (i == 0) {
+          // save the init element for every vector to avoid
+          // java.lang.IllegalArgumentException: No columns to insert
+          if (mode == "PRODUCT") {
+            putObj.add(Bytes.toBytes("info"),
+              Bytes.toBytes(-1), Bytes.toBytes(-1.0))
+          } else {
+            putObj.add(Bytes.toBytes("info"),
+              Bytes.toBytes((-1).toString), Bytes.toBytes((-1.0).toString))
+          }
+        }
+        if (filteredFeatureIndexSet.contains(index)) {
+          if (mode == "PRODUCT") {
+            putObj.add(Bytes.toBytes("info"),
+              Bytes.toBytes(index), Bytes.toBytes(value))
+          } else {
+            putObj.add(Bytes.toBytes("info"),
+              Bytes.toBytes(index.toString), Bytes.toBytes(value.toString))
+          }
+        }
+      }
+      (new ImmutableBytesWritable, putObj)
+    }
+  }
+
   /**
    * create job instance with typesafe config instance
    * @param config the input typesafe config instance
    * @return job instance to output hbase table
    */
-  private def createJobInstance(config: Config): Job = {
-    val outputTable = config.getString("cpslab.allpair.outputTable")
-    val zooKeeperQuorum = config.getString("cpslab.cluster.hbase.zookeeperQuorum")
-    val clientPort = config.getString("cpslab.cluster.hbase.clientPort")
+  private def createJobInstance(config: Config, outputTable: String): Job = {
+    val zooKeeperQuorum = config.getString("cpslab.allpair.zooKeeperQuorum")
+    val clientPort = config.getString("cpslab.allpair.clientPort")
     val hbaseConf = HBaseConfiguration.create()
     hbaseConf.set(TableOutputFormat.OUTPUT_TABLE, outputTable)
     hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
@@ -56,50 +117,38 @@ object HBaseUpLoader {
       res
     }
     val maxDimRDD = dimensionValueRDD.reduceByKey((a, b) => math.max(a, b))
-    val maxDimOutRDD = maxDimRDD.map{case (index, value) => {
-      val putObj = new Put(Bytes.toBytes(index))
-      putObj.add(Bytes.toBytes("info"), Bytes.toBytes("maxValue"), Bytes.toBytes(value))
-      (new ImmutableBytesWritable, putObj)
-    }}
-    maxDimOutRDD.saveAsNewAPIHadoopDataset(createJobInstance(config).getConfiguration)
+    val maxDimOutRDD = maxDimRDD.map(indexMaxValue =>
+      generateMaxPutKVPair(Some(indexMaxValue)).get).
+      saveAsNewAPIHadoopDataset(createJobInstance(config,
+      config.getString("cpslab.allpair.rawDataTable") + "_MAX").getConfiguration)
 
     //filtering the unusual dimensions
     val sortedFeatureArray = maxDimRDD.collect().sortWith((a, b) => a._2 > b._2)
-    val filteredFeatureIndexSet =
+    filteredFeatureIndexSet =
       new HashSet[Int]() ++ sortedFeatureArray.take(filterThreshold).
         map(_._1)
 
     //save the HadoopDataset to HBase
-    vectorRDD.map{case (sparseVector, uniqueId) =>
-      val putObj = new Put(Bytes.toBytes(uniqueId))
-      for (i <- 0 until sparseVector.indices.length) {
-        val index = sparseVector.indices(i)
-        val value = sparseVector.values(i)
-        if (i == 0) {
-          // save the init element for every vector to avoid
-          // java.lang.IllegalArgumentException: No columns to insert
-          putObj.add(Bytes.toBytes("info"),
-            Bytes.toBytes(-1), Bytes.toBytes(-1.0))
-        }
-        if (filteredFeatureIndexSet.contains(index)) {
-          putObj.add(Bytes.toBytes("info"),
-            Bytes.toBytes(index), Bytes.toBytes(value))
-        }
-      }
-      (new ImmutableBytesWritable, putObj)
-    }.saveAsNewAPIHadoopDataset(createJobInstance(config).getConfiguration)
+    vectorRDD.map( vectorIdKVPair =>
+      generatePutKVPair(Some(vectorIdKVPair)).get
+    ).saveAsNewAPIHadoopDataset(createJobInstance(config,
+      config.getString("cpslab.allpair.rawDataTable")).getConfiguration)
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.length < 3) {
-      println("usage: inputDir threshold")
+    if (args.length < 5) {
+      println("usage: inputDir threshold mode akka_config_path app_config_path")
+      println("mode - DEBUG, PRODUCTION")
       sys.exit(1)
     }
-    val sc = new SparkContext()
 
+    mode = args(2).toUpperCase
+
+    val sc = new SparkContext()
     val inputFileRDD = sc.textFile(args(0))
-    val config = ConfigFactory.parseString("cpslab.cluster.hbase.zookeeperQuorum=master\n" +
-      "cpslab.cluster.hbase.clientPort=2181")
+    val config = ConfigFactory.parseFile(new File(args(3))).
+      withFallback(ConfigFactory.parseFile(new File(args(4)))).
+      withFallback(ConfigFactory.load())
     saveToHBase(config, inputFileRDD, args(1).toInt)
   }
 }

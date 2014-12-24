@@ -8,7 +8,7 @@ import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
+private class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
                           maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
