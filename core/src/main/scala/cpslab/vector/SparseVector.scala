@@ -3,10 +3,11 @@ package cpslab.vector
 import java.lang.{Double => JavaDouble, Integer => JavaInteger, Iterable => JavaIterable}
 import java.util
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
-
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
 // added this file to eliminated the dependency to spark (causing sbt
 // assembly extremely slow)
@@ -76,6 +77,15 @@ object Vectors {
    */
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
     new SparseVector(size, indices, values)
+
+  /**
+   * Creates a sparse vector providing SparkSparseVector
+   * @param vector spark vector
+   * @return the customized SparseVectorVersion
+   */
+  def sparse(vector: SparkSparseVector): SparseVector = {
+    new SparseVector(vector.size, vector.indices, vector.values)
+  }
 
   /**
    * Creates a sparse vector using unordered (index, value) pairs.

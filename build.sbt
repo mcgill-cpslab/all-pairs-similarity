@@ -35,6 +35,11 @@ lazy val commonSettings = Seq(
 )
 
 val commonDependency = Seq(
+  "org.apache.spark" % "spark-mllib_2.10" % "1.1.0"
+    exclude("org.slf4j", "slf4j-log4j12")
+    exclude("org.spark-project.akka", "akka-remote_2.10")
+    exclude("org.spark-project.akka", "akka-slf4j_2.10")
+    exclude("org.spark-project.akka", "akka-testkit_2.10"),
   "org.scalatest" % "scalatest_2.10" % "2.2.2",
   "org.apache.hbase" % "hbase-client" % "0.98.7-hadoop2"
     exclude("org.slf4j", "slf4j-log4j12"),
@@ -47,7 +52,6 @@ val commonDependency = Seq(
 )
 
 resolvers += "sonatype-releases" at "https://oss.sonatype.org/content/repositories/releases/"
-
 
 lazy val core = (project in file("core")).
   settings(assemblySettings: _*).
@@ -74,8 +78,6 @@ lazy val etl = project.dependsOn(core).
   settings(commonSettings: _*).
   settings(
     libraryDependencies ++= Seq(
-      "org.apache.spark" % "spark-mllib_2.10" % "1.1.0"
-        exclude("org.slf4j", "slf4j-log4j12"),
       "org.apache.hadoop" % "hadoop-distcp" % "2.3.0"
         exclude("org.slf4j", "slf4j-log4j12"),
       "org.apache.hadoop" % "hadoop-client" % "2.3.0"

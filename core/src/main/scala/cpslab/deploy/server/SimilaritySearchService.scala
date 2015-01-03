@@ -3,6 +3,9 @@ package cpslab.deploy.server
 import java.io.File
 
 import akka.actor.Props
+import akka.cluster.routing.{ClusterRouterGroupSettings, ClusterRouterGroup}
+import akka.contrib.pattern.ClusterSharding
+import akka.routing.ConsistentHashingGroup
 import com.typesafe.config.ConfigFactory
 
 import cpslab.deploy.CommonUtils
@@ -18,7 +21,15 @@ object SimilaritySearchService {
     val conf = ConfigFactory.parseFile(new File(args(0))).
       withFallback(ConfigFactory.parseFile(new File(args(1)))).
       withFallback(ConfigFactory.load())
-    CommonUtils.startShardingSystem(Some(Props(new EntryProxyActor(conf))),
+    val (_, system) = CommonUtils.startShardingSystem(Some(Props(new EntryProxyActor(conf))),
       conf)
+    val regionActorPath = ClusterSharding(system).shardRegion(EntryProxyActor.entryProxyActorName).
+      path.toStringWithoutAddress
+    // start the router
+    system.actorOf(
+      ClusterRouterGroup(ConsistentHashingGroup(Nil), ClusterRouterGroupSettings(
+        totalInstances = 100, routeesPaths = List(regionActorPath),
+        allowLocalRoutees = true, useRole = Some("compute"))).props(),
+      name = "regionRouter")
   }
 }

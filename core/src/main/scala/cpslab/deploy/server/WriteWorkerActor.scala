@@ -15,7 +15,7 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 
-import cpslab.message.{DataPacket, LoadData}
+import cpslab.message.{VectorIOMsg, DataPacket, LoadData}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 
 private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor
@@ -77,23 +77,7 @@ with ActorLogging {
     parseTask.cancel()
   }
 
-  private def readFromDataBase(tableName: String,
-                               startRow: Array[Byte], endRow: Array[Byte]): List[SparseVector] = {
-    val hbaseConf = HBaseConfiguration.create()
-    hbaseConf.set(TableInputFormat.INPUT_TABLE, tableName)
-    hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
-    hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
-    val hTable = new HTable(hbaseConf, tableName)
-    val scan = {
-      if (mode == "PRODUCT") {
-        new Scan(startRow, endRow)
-      } else {
-        val startRowStr = Bytes.toInt(startRow).toString
-        val endRowStr = Bytes.toInt(endRow).toString
-        new Scan(Bytes.toBytes(startRowStr), Bytes.toBytes(endRowStr))
-      }
-    }
-    scan.addFamily(Bytes.toBytes("info"))
+  private def doReadFromHBase(hTable: HTable, scan: Scan): List[SparseVector] = {
     val retVectorArray = new ListBuffer[SparseVector]
     try {
       for (result <- hTable.getScanner(scan).iterator()) {
@@ -141,36 +125,79 @@ with ActorLogging {
     }
   }
 
-  override def receive: Receive = {
-    case m @ LoadData(tableName, startRow, endRow) =>
-      log.info("WRITEWORKERACTOR %s: received %s".format(self, m))
-      inputVectors = readFromDataBase(tableName, startRow, endRow)
-      log.info("total inputVector number:%d".format(inputVectors.size))
-      parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
-        def run(): Unit = {
-          parseInput()
+  private def readFromDataBase(tableName: String,
+                               startRow: Array[Byte], endRow: Array[Byte]): List[SparseVector] = {
+    val hbaseConf = HBaseConfiguration.create()
+    hbaseConf.set(TableInputFormat.INPUT_TABLE, tableName)
+    hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
+    hbaseConf.set("hbase.zookeeper.property.clientPort", clientPort)
+    val hTable = new HTable(hbaseConf, tableName)
+    val scan = {
+      if (mode == "PRODUCT") {
+        new Scan(startRow, endRow)
+      } else {
+        val startRowStr = Bytes.toInt(startRow).toString
+        val endRowStr = Bytes.toInt(endRow).toString
+        new Scan(Bytes.toBytes(startRowStr), Bytes.toBytes(endRowStr))
+      }
+    }
+    scan.addFamily(Bytes.toBytes("info"))
+    doReadFromHBase(hTable, scan)
+  }
+
+  private def handleLoadData(loadReq: LoadData): Unit = {
+    log.info("WRITEWORKERACTOR %s: received %s".format(self, loadReq))
+    inputVectors = readFromDataBase(loadReq.tableName, loadReq.startRow, loadReq.endRow)
+    log.info("total inputVector number:%d".format(inputVectors.size))
+    parseTask = context.system.scheduler.scheduleOnce(0 milliseconds, new Runnable {
+      def run(): Unit = {
+        parseInput()
+      }
+    })
+  }
+
+  private def handleIOTrigger: Unit = {
+    writeBufferLock.acquire()
+    if (!writeBuffer.isEmpty) {
+      for ((shardId, vectors) <- writeBuffer) {
+        val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
+        for (vectorIdx <- vectors) {
+          val sparseVector = vectorsStore(vectorIdx)
+          //de-duplicate, the vector is sent to the target actor for only once
+          //but with all the indices, _ % maxShardNum == shardId
+          vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
+            filter(_ % maxShardNum == shardId), sparseVector)
         }
-      })
-    case WriteWorkerActor.IOTrigger =>
+        println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
+          format(shardId, vectorSet.size))
+        clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
+          DataPacket(shardId, vectorSet.toSet, clientActor)
+      }
+      writeBuffer.clear()
+    }
+    writeBufferLock.release()
+  }
+
+  private def handleVectorIOMsg(vectorIO: VectorIOMsg): Unit = {
+    for (vector <- vectorIO.vectors){
       writeBufferLock.acquire()
-      if (!writeBuffer.isEmpty) {
-        for ((shardId, vectors) <- writeBuffer) {
-          val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
-          for (vectorIdx <- vectors) {
-            val sparseVector = vectorsStore(vectorIdx)
-            //de-duplicate, the vector is sent to the target actor for only once
-            //but with all the indices, _ % maxShardNum == shardId
-            vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
-              filter(_ % maxShardNum == shardId), sparseVector)
-          }
-          println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
-            format(shardId, vectorSet.size))
-          clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
-            DataPacket(shardId, vectorSet.toSet, clientActor)
-        }
-        writeBuffer.clear()
+      vectorsStore += Vectors.sparse(vector)
+      for (nonZeroIdx <- vector.indices) {
+        writeBuffer.getOrElseUpdate(
+          nonZeroIdx % maxShardNum,// this is the shard Id
+          new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()
+    }
+  }
+
+  override def receive: Receive = {
+    case lq @ LoadData(_, _, _) =>
+      handleLoadData(lq)
+    case v @ VectorIOMsg(vectors) =>
+      handleVectorIOMsg(v)
+    case WriteWorkerActor.IOTrigger =>
+      handleIOTrigger
   }
 }
 

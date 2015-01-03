@@ -106,10 +106,11 @@ object Client {
       println("Usage: program akka_conf_path app_conf_path")
       sys.exit(1)
     }
-
-    val (conf, system) = CommonUtils.startShardingSystem(None, akkaConfPath = args(0),
-      appConfPath = args(1))
-    mode = conf.getString("cpslab.allpair.runMode")
-    system.actorOf(Props(new Client(conf)))
+    if (args.length == 2) {
+      val (conf, system) = CommonUtils.startShardingSystem(None, akkaConfPath = args(0),
+        appConfPath = args(1))
+      mode = conf.getString("cpslab.allpair.runMode")
+      system.actorOf(Props(new Client(conf)))
+    }
   }
 }

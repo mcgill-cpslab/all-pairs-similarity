@@ -8,7 +8,7 @@ import scala.util.Random
 import akka.actor._
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils
-import cpslab.message.{DataPacket, IndexData, LoadData, Test}
+import cpslab.message._
 import cpslab.vector.SparseVectorWrapper
 import org.apache.hadoop.hbase.client.{HTable, Scan}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
@@ -82,38 +82,64 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     }
   }
 
+  private def handleLoadData(loadReq: LoadData): Unit = {
+    log.info("received %s".format(loadReq))
+    val tableName = loadReq.tableName
+    val startRow = loadReq.startRow
+    val endRow = loadReq.endRow
+    val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
+      maxIOEntryActorNum)
+    for (loadDataReq <- loadRequests) {
+      var targetWriterWorker: ActorRef = null
+      if (writeActors.size < maxIOEntryActorNum) {
+        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
+        writeActors += targetWriterWorker
+        context.watch(targetWriterWorker)
+      } else {
+        targetWriterWorker = writeActors.toList.apply(rand.nextInt(writeActors.size))
+      }
+      if (targetWriterWorker != null) {
+        targetWriterWorker ! loadDataReq
+      }
+    }
+  }
+
+  private def handleVectorIOMsg(vectorIOMsg: VectorIOMsg): Unit = {
+    var targetWriterWorker: ActorRef = null
+    if (writeActors.size < maxIOEntryActorNum) {
+      targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
+      writeActors += targetWriterWorker
+      context.watch(targetWriterWorker)
+    } else {
+      targetWriterWorker = writeActors.toList.apply(rand.nextInt(writeActors.size))
+    }
+    if (targetWriterWorker != null) {
+      targetWriterWorker ! vectorIOMsg
+    }
+  }
+
+  private def handleDataPacket(dp: DataPacket): Unit = {
+    for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
+      if (!indexEntryActors.contains(indexActorId)) {
+        // if we haven't read the max weight for each dimension, we should do that
+        // before we start the first indexWorker, implemented with lazy evaluation
+        // in the definition of maxWeight
+        val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
+          dp.clientActor, maxWeight)))
+        context.watch(newEntryActor)
+        indexEntryActors += indexActorId -> newEntryActor
+      }
+      indexEntryActors(indexActorId) ! IndexData(vectorsToSend.toSet)
+    }
+  }
+
   override def receive: Receive = {
     case m @ LoadData(tableName, startRow, endRow) =>
-      log.info("received %s".format(m))
-      val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
-        maxIOEntryActorNum)
-      for (loadDataReq <- loadRequests) {
-        var targetWriterWorker: ActorRef = null
-        if (writeActors.size < maxIOEntryActorNum) {
-          targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
-          writeActors += targetWriterWorker
-          context.watch(targetWriterWorker)
-        } else {
-          targetWriterWorker = writeActors.toList.apply(rand.nextInt(writeActors.size))
-        }
-        if (targetWriterWorker != null) {
-          targetWriterWorker ! loadDataReq
-        }
-      }
+      handleLoadData(m)
+    case v @ VectorIOMsg(vectors) =>
+      handleVectorIOMsg(v)
     case dp @ DataPacket(_, _, clientActor) =>
-      for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
-        if (!indexEntryActors.contains(indexActorId)) {
-          // if we haven't read the max weight for each dimension, we should do that
-          // before we start the first indexWorker, implemented with lazy evaluation
-          // in the definition of maxWeight
-          val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
-            clientActor, maxWeight)))
-          context.watch(newEntryActor)
-          indexEntryActors += indexActorId -> newEntryActor
-        }
-        indexEntryActors(indexActorId) ! IndexData(vectorsToSend.toSet)
-      }
-
+      handleDataPacket(dp)
     case Terminated(stoppedChild) =>
       //TODO: restart children
     case t @ Test(content) =>
