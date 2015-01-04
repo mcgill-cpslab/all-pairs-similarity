@@ -8,7 +8,7 @@ import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-private class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
+private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
                           maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
@@ -43,12 +43,7 @@ private class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
     println("restarting indexActor for %s".format(reason))
   }
 
-  // build the inverted index with the given SparseVectorWrapper
-  private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]):
-  mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
-    val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
-      mutable.HashMap[SparseVectorWrapper, Double]]
-    println("candidateVectors size:%d".format(candidateVectors.size))
+  private def buildInvertedIndex(candidateVectors: Set[SparseVectorWrapper]): Unit = {
     for (candidateVector <- candidateVectors) {
       //check if the vectorWrapper should be indexed
       val shouldIndex = checkVectorIfToBeIndexed(candidateVector)
@@ -62,6 +57,35 @@ private class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
           invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
             currentIdx
         }
+      }
+    }
+  }
+
+  // build the inverted index with the given SparseVectorWrapper
+  private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]):
+  mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
+
+    // get the vectors which are similar to the query vector from the given list
+    def querySimilarVectors(queryVector: SparseVectorWrapper,
+                            candidateList: mutable.HashSet[Int]):
+    List[(SparseVectorWrapper, Double)] = {
+      val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
+      // output the similar vector
+      for (similarVectorCandidateIdx <- candidateList) {
+        val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
+        val sim = calculateSimilarity(similarVectorCandidate, queryVector)
+        if (sim >= similarityThreshold) {
+          similarityHashMap += similarVectorCandidate -> sim
+        }
+      }
+      similarityHashMap.toList
+    }
+
+    val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
+      mutable.HashMap[SparseVectorWrapper, Double]]
+    println("candidateVectors size:%d".format(candidateVectors.size))
+    for (candidateVector <- candidateVectors) {
+      for (nonZeroIdxToSaveLocally <- candidateVector.indices) {
         val similarVectors = querySimilarVectors(candidateVector,
           invertedIndex(nonZeroIdxToSaveLocally))
         // TODO: need to deduplicate
@@ -72,29 +96,17 @@ private class IndexingWorkerActor(conf: Config, replyTo: ActorRef,
     outputSimSet
   }
 
-  // get the vectors which are similar to the query vector from the given list
-  private def querySimilarVectors(queryVector: SparseVectorWrapper,
-                                  candidateList: mutable.HashSet[Int]):
-  List[(SparseVectorWrapper, Double)] = {
-    val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
-    // output the similar vector
-    for (similarVectorCandidateIdx <- candidateList) {
-      val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
-      val sim = calculateSimilarity(similarVectorCandidate, queryVector)
-      if (sim >= similarityThreshold) {
-        similarityHashMap += similarVectorCandidate -> sim
-      }
-    }
-    similarityHashMap.toList
-  }
-
   def receive: Receive = {
     case m @ IndexData(vectors) =>
       //println("INDEXWORKERACTOR: received %s".format(m))
       println("received indexdata")
-      replyTo ! SimilarityOutput(querySimilarItems(vectors))
+      buildInvertedIndex(vectors)
+      if (replyTo.isDefined) {
+        replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
+      }
+      // TODO: develop a akka receiver of spark streaming
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
-      replyTo ! t
+      replyTo.get ! t
   }
 }

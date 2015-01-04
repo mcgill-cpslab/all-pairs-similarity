@@ -92,7 +92,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     for (loadDataReq <- loadRequests) {
       var targetWriterWorker: ActorRef = null
       if (writeActors.size < maxIOEntryActorNum) {
-        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
+        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, Some(sender()))))
         writeActors += targetWriterWorker
         context.watch(targetWriterWorker)
       } else {
@@ -107,7 +107,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   private def handleVectorIOMsg(vectorIOMsg: VectorIOMsg): Unit = {
     var targetWriterWorker: ActorRef = null
     if (writeActors.size < maxIOEntryActorNum) {
-      targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, sender())))
+      targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, None)))
       writeActors += targetWriterWorker
       context.watch(targetWriterWorker)
     } else {
@@ -145,7 +145,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     case t @ Test(content) =>
       println("receiving %s".format(t))
       val newEntryActor = context.actorOf(
-        Props(new IndexingWorkerActor(conf, sender(), null)))
+        Props(new IndexingWorkerActor(conf, Some(sender()), null)))
       context.watch(newEntryActor)
       newEntryActor ! t
   }

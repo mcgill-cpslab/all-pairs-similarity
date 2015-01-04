@@ -18,7 +18,7 @@ import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 import cpslab.message.{VectorIOMsg, DataPacket, LoadData}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 
-private class WriteWorkerActor(conf: Config, clientActor: ActorRef) extends Actor
+private class WriteWorkerActor(conf: Config, clientActor: Option[ActorRef]) extends Actor
 with ActorLogging {
   import context._
 

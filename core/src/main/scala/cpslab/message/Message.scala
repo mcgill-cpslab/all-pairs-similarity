@@ -15,8 +15,8 @@ case class LoadData(tableName: String, startRow: Array[Byte], endRow: Array[Byte
 case class VectorIOMsg(vectors: Set[SparkSparseVector]) extends Message
 
 // shardId is to ensure that each vector is sent to a certain shard for only once
-case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper], clientActor: ActorRef)
-  extends Message
+case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper],
+                      clientActor: Option[ActorRef]) extends Message
 
 case class IndexData(vectors: Set[SparseVectorWrapper])
 
