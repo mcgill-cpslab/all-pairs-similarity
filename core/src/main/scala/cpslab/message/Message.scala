@@ -21,7 +21,21 @@ case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper],
 case class IndexData(vectors: Set[SparseVectorWrapper])
 
 case class SimilarityOutput(output: mutable.HashMap[SparseVectorWrapper,
-  mutable.HashMap[SparseVectorWrapper, Double]])
+  mutable.HashMap[SparseVectorWrapper, Double]]) {
+
+  override def toString: String = {
+    val outputStringBuilder = new mutable.StringBuilder()
+    for (similarityPairResult <- output) {
+      outputStringBuilder.append("---------------------------------")
+      outputStringBuilder.append(similarityPairResult._1 + ":")
+      for ((similarVector, similarity) <- similarityPairResult._2) {
+        outputStringBuilder.append(similarVector + "," + similarity + ";")
+      }
+      outputStringBuilder.append("\n")
+    }
+    outputStringBuilder.toString()
+  }
+}
 
 case object WriteWorkerFinished extends Message
 

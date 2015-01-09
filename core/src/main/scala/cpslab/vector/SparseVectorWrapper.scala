@@ -6,5 +6,8 @@ package cpslab.vector
  *                  vector) of the vector to be indexed
  * @param sparseVector the real vector data
  */
-case class SparseVectorWrapper(var indices: Set[Int],
-                               sparseVector: SparseVector);
+case class SparseVectorWrapper(var indices: Set[Int], sparseVector: SparseVector) {
+  override def toString : String = {
+    sparseVector.toString
+  }
+}
