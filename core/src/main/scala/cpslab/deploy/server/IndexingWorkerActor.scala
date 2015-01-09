@@ -104,7 +104,7 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
       if (replyTo.isDefined) {
         replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
       }
-      // TODO: develop a akka receiver of spark streaming
+      // TODO: develop an akka receiver of spark streaming
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
       replyTo.get ! t
