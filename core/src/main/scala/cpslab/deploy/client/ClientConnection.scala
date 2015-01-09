@@ -1,6 +1,6 @@
 package cpslab.deploy.client
 
-import akka.actor.{ActorSystem, ActorSelection}
+import akka.actor.ActorSystem
 import cpslab.message.VectorIOMsg
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 
