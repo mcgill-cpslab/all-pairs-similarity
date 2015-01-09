@@ -4,6 +4,8 @@ import sbtassembly.Plugin.{MergeStrategy, PathList}
 
 assemblySettings
 
+resolvers += "sonatype-releases" at "https://oss.sonatype.org/content/repositories/releases/"
+
 lazy val commonSettings = Seq(
   version := "0.1",
   scalaVersion := "2.10.4",
@@ -45,8 +47,6 @@ val commonDependency = Seq(
   "org.apache.hbase" % "hbase-server" % "0.98.7-hadoop2"
     exclude("org.slf4j", "slf4j-log4j12")
 )
-
-resolvers += "sonatype-releases" at "https://oss.sonatype.org/content/repositories/releases/"
 
 lazy val core = (project in file("core")).
   settings(assemblySettings: _*).

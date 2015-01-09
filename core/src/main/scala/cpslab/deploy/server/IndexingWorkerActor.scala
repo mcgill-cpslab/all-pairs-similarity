@@ -4,6 +4,8 @@ import akka.actor.{Actor, ActorRef}
 import com.typesafe.config.Config
 import cpslab.message.{IndexData, SimilarityOutput, Test}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -103,8 +105,15 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
       buildInvertedIndex(vectors)
       if (replyTo.isDefined) {
         replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
+      } else {
+        //TODO: regulate the output (HDFS does not allow append)
+        val hadoopConf = new Configuration()
+        hadoopConf.set("fs.default.name", conf.getString("cpslab.allpair.hdfs"))
+        val fs = FileSystem.get(hadoopConf)
+        val fos = fs.create(new Path("/output_" + System.currentTimeMillis()))
+        fos.writeChars(SimilarityOutput(querySimilarItems(vectors)).toString)
+        fos.close()
       }
-      // TODO: develop an akka receiver of spark streaming
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
       replyTo.get ! t
