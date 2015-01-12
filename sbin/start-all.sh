@@ -16,6 +16,3 @@ exit
 EOF
 done
 wait
-
-
-
