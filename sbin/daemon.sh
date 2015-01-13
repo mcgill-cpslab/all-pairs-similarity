@@ -8,7 +8,7 @@ option=$1
 
 case $option in 
 	(start)
-	  mkdir -p $WORKDIR/pid/
+	  mkdir -p $WORKDIR/all-pairs-similarity/pid/
 	  touch $PID_FILE
 	  cd $WORKDIR/all-pairs-similarity
 	  nohup java -Xmx4096m -Xms1024m -cp core/target/scala-2.10/AllPairsSimilarityCore-assembly-0.1.jar cpslab.deploy.server.SimilaritySearchService conf/akka.conf conf/app.conf >> /dev/null &
