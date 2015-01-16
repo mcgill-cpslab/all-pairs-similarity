@@ -5,7 +5,7 @@ import java.io.File
 import akka.actor.Props
 import akka.cluster.routing.{ClusterRouterGroupSettings, ClusterRouterGroup}
 import akka.contrib.pattern.ClusterSharding
-import akka.routing.ConsistentHashingGroup
+import akka.routing.{RoundRobinGroup, ConsistentHashingGroup}
 import com.typesafe.config.ConfigFactory
 
 import cpslab.deploy.CommonUtils
@@ -27,7 +27,7 @@ object SimilaritySearchService {
       path.toStringWithoutAddress
     // start the router
     system.actorOf(
-      ClusterRouterGroup(ConsistentHashingGroup(Nil), ClusterRouterGroupSettings(
+      ClusterRouterGroup(RoundRobinGroup(List(regionActorPath)), ClusterRouterGroupSettings(
         totalInstances = 100, routeesPaths = List(regionActorPath),
         allowLocalRoutees = true, useRole = Some("compute"))).props(),
       name = "regionRouter")
