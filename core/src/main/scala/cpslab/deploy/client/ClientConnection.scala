@@ -21,7 +21,7 @@ class ClientConnection(remoteAddresses: List[String], localActorSystem: ActorSys
     brokerList.toList
   }
 
-  val remoteRouter = localActorSystem.actorSelection(remoteAddresses(
+  val remoteRouter = localActorSystem.actorSelection(remoteAddressRouterList(
     Random.nextInt(remoteAddresses.length)))
 
   /**
