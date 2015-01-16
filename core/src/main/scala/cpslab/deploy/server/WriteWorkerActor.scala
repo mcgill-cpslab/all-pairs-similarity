@@ -7,16 +7,15 @@ import scala.concurrent.Lock
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-import akka.actor.{ActorLogging, Actor, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorLogging, ActorRef, Cancellable}
 import akka.contrib.pattern.ClusterSharding
 import com.typesafe.config.Config
+import cpslab.message.{DataPacket, LoadData, VectorIOMsg}
+import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import org.apache.hadoop.hbase.client.{HTable, Scan}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-
-import cpslab.message.{VectorIOMsg, DataPacket, LoadData}
-import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 
 private class WriteWorkerActor(conf: Config, clientActor: Option[ActorRef]) extends Actor
 with ActorLogging {

@@ -3,11 +3,10 @@ package cpslab.deploy.server
 import java.io.File
 
 import akka.actor.Props
-import akka.cluster.routing.{ClusterRouterGroupSettings, ClusterRouterGroup}
+import akka.cluster.routing.{ClusterRouterGroup, ClusterRouterGroupSettings}
 import akka.contrib.pattern.ClusterSharding
-import akka.routing.{RoundRobinGroup, ConsistentHashingGroup}
+import akka.routing.RoundRobinGroup
 import com.typesafe.config.ConfigFactory
-
 import cpslab.deploy.CommonUtils
 
 object SimilaritySearchService {

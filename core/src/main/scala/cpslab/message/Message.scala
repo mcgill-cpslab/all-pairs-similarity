@@ -3,9 +3,8 @@ package cpslab.message
 import scala.collection.mutable
 
 import akka.actor.ActorRef
+import cpslab.vector.SparseVectorWrapper
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
-
-import cpslab.vector.{SparseVector, SparseVectorWrapper}
 
 sealed trait Message
 

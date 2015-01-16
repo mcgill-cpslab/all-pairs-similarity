@@ -6,8 +6,8 @@ import java.util
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
 
-import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 
 // added this file to eliminated the dependency to spark (causing sbt
 // assembly extremely slow)

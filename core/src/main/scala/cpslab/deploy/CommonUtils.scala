@@ -5,13 +5,12 @@ import java.io.File
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorSystem, Props}
 import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
-import org.apache.hadoop.hbase.util.Bytes
-
 import cpslab.deploy.server.EntryProxyActor
-import cpslab.message.{VectorIOMsg, DataPacket, LoadData, Test}
+import cpslab.message.{DataPacket, LoadData, Test, VectorIOMsg}
+import org.apache.hadoop.hbase.util.Bytes
 
 object CommonUtils {
 

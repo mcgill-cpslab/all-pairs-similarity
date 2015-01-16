@@ -1,14 +1,14 @@
 package cpslab.deploy.server
 
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
 import akka.actor.{Actor, ActorRef}
 import com.typesafe.config.Config
 import cpslab.message.{IndexData, SimilarityOutput, Test}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
-
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
                           maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {

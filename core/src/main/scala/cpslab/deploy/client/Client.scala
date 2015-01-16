@@ -6,11 +6,10 @@ import scala.language.postfixOps
 import akka.actor.{Actor, PoisonPill, Props}
 import akka.contrib.pattern.ClusterSharding
 import com.typesafe.config.Config
-import org.apache.hadoop.hbase.util.Bytes
-
 import cpslab.deploy.CommonUtils
 import cpslab.deploy.server.EntryProxyActor
 import cpslab.message.{SimilarityOutput, Test}
+import org.apache.hadoop.hbase.util.Bytes
 
 private class Client(config: Config) extends Actor {
 
@@ -49,7 +48,6 @@ private class Client(config: Config) extends Actor {
    */
   private def sendIOCommand(tableName: String, startKey: Array[Byte],
                             endKey: Array[Byte]): Unit = {
-    import Client._
     val startKeyInt = Bytes.toString(startKey).toInt
     val endKeyInt = Bytes.toString(endKey).toInt
     val loadDataReqs = CommonUtils.parseLoadDataRequest(tableName,
@@ -61,7 +59,7 @@ private class Client(config: Config) extends Actor {
   }
 
   private def terminal(): Unit = {
-    import Client._
+    import cpslab.deploy.client.Client._
     println("Terminal:")
     var cmd = ""
     while (cmd != "quit") {

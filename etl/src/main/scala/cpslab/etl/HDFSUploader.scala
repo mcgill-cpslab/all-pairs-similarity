@@ -3,13 +3,13 @@ package cpslab.etl
 import java.io._
 import java.util.Properties
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
 import org.apache.hadoop.tools.util.{DistCpUtils, ThrottledInputStream}
 import org.apache.spark.SparkContext
-
-import scala.collection.mutable.ListBuffer
 
 
 object HDFSUploader {

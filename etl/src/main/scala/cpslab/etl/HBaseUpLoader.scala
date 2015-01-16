@@ -2,6 +2,8 @@ package cpslab.etl
 
 import java.io.File
 
+import scala.collection.immutable.HashSet
+
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.vector.{SparseVector, Vectors}
 import org.apache.hadoop.hbase.HBaseConfiguration
@@ -12,8 +14,6 @@ import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-
-import scala.collection.immutable.HashSet
 
 object HBaseUpLoader {
 
