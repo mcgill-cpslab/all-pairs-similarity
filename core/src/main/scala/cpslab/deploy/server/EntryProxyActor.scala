@@ -1,5 +1,7 @@
 package cpslab.deploy.server
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -42,7 +44,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     writeBuffer
   }
 
-  private def readMaxWeight: mutable.HashMap[Int, Double] = {
+  private def readMaxWeight: Option[mutable.HashMap[Int, Double]] = {
     val tableName = conf.getString("cpslab.allpair.rawDataTable") + "_MAX"
     val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
     val clientPort = conf.getString("cpslab.allpair.clientPort")
@@ -74,11 +76,11 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
         }
         retVectorArray += dimensionIdx -> maxWeight
       }
-      retVectorArray
+      Some(retVectorArray)
     } catch {
       case e: Exception =>
         e.printStackTrace()
-        retVectorArray
+        None
     }
   }
 
@@ -153,4 +155,6 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
 object EntryProxyActor {
   val entryProxyActorName = "entryProxy"
+  
+  val nextId = new AtomicInteger(0)
 }

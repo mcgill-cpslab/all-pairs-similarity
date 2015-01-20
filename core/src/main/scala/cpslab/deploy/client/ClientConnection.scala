@@ -28,7 +28,7 @@ class ClientConnection(remoteAddresses: List[String], localActorSystem: ActorSys
    * send the set of sparseVector to remote cluster
    * @param vectors the vectors to send
    */
-  def insertNewVector(vectors: Set[SparkSparseVector]): Unit = {
+  def insertNewVector(vectors: Set[(String, SparkSparseVector)]): Unit = {
     remoteRouter ! VectorIOMsg(vectors)
   }
 }

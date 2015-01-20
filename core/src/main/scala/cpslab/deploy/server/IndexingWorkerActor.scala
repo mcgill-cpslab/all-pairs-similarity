@@ -11,7 +11,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
-                          maxWeightMap: mutable.HashMap[Int, Double]) extends Actor {
+                          maxWeightMap: Option[mutable.HashMap[Int, Double]]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
@@ -20,8 +20,8 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
   //assuming the normalized vectors
   private def calculateSimilarity(vector1: SparseVectorWrapper,
                                   vector2: SparseVectorWrapper): Double = {
-    val sparseVector1 = vector1.sparseVector
-    val sparseVector2 = vector2.sparseVector
+    val (vectorId1, sparseVector1) = vector1.sparseVector
+    val (vectorId2, sparseVector2) = vector2.sparseVector
     val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
     var similarity = 0.0
     for (idx <- intersectIndex) {
@@ -32,13 +32,20 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
   }
 
   private def checkVectorIfToBeIndexed(candidateVector: SparseVectorWrapper): Boolean = {
-    val maxWeightedVector = {
-      val keys = candidateVector.sparseVector.indices
-      val values = maxWeightMap.filter{case (key, value) => keys.contains(key)}.values.toArray
-      SparseVectorWrapper(candidateVector.indices,
-        Vectors.sparse(keys.size, keys, values).asInstanceOf[SparseVector])
+    if (maxWeightMap.isDefined) {
+      val maxWeightedVector = {
+        val keys = candidateVector.sparseVector._2.indices
+        val values = maxWeightMap.map(
+          _.filter {
+            case (key, value) => keys.contains(key)
+          }.values.toArray).get
+        SparseVectorWrapper(candidateVector.indices,
+          ("maxVector", Vectors.sparse(keys.size, keys, values).asInstanceOf[SparseVector]))
+      }
+      calculateSimilarity(maxWeightedVector, candidateVector) >= similarityThreshold
+    } else {
+      true
     }
-    calculateSimilarity(maxWeightedVector, candidateVector) >= similarityThreshold
   }
 
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {

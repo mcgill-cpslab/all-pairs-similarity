@@ -11,7 +11,7 @@ sealed trait Message
 case class LoadData(tableName: String, startRow: Array[Byte], endRow: Array[Byte])
   extends Message
 
-case class VectorIOMsg(vectors: Set[SparkSparseVector]) extends Message
+case class VectorIOMsg(vectors: Set[(String, SparkSparseVector)]) extends Message
 
 // shardId is to ensure that each vector is sent to a certain shard for only once
 case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper],

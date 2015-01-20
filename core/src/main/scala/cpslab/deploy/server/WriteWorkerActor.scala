@@ -23,7 +23,7 @@ with ActorLogging {
 
   val clusterSharding = ClusterSharding(context.system)
 
-  private var inputVectors: List[SparseVector] = null
+  private var inputVectors: List[(String, SparseVector)] = null
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   private val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
   private val clientPort = conf.getString("cpslab.allpair.clientPort")
@@ -40,7 +40,7 @@ with ActorLogging {
   var parseTask: Cancellable = null
   var writeTask: Cancellable = null
 
-  var vectorsStore: ListBuffer[SparseVector] = new ListBuffer[SparseVector]
+  var vectorsStore: ListBuffer[(String, SparseVector)] = new ListBuffer[(String, SparseVector)]
 
   val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
   val mode = conf.getString("cpslab.allpair.runMode")
@@ -63,9 +63,9 @@ with ActorLogging {
 
   private def parseInput(): Unit = {
     println("parsing Input")
-    for (vector <- inputVectors){
+    for ((vectorId, vector) <- inputVectors){
       writeBufferLock.acquire()
-      vectorsStore += vector
+      vectorsStore += (vectorId -> vector)
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum,// this is the shard Id
@@ -76,8 +76,8 @@ with ActorLogging {
     parseTask.cancel()
   }
 
-  private def doReadFromHBase(hTable: HTable, scan: Scan): List[SparseVector] = {
-    val retVectorArray = new ListBuffer[SparseVector]
+  private def doReadFromHBase(hTable: HTable, scan: Scan): List[(String, SparseVector)] = {
+    val retVectorArray = new ListBuffer[(String, SparseVector)]
     try {
       for (result <- hTable.getScanner(scan).iterator()) {
         //convert to the vector
@@ -107,13 +107,14 @@ with ActorLogging {
           }
         }
         if (sparseArrayIndex != 0) {
-          retVectorArray += Vectors.sparse(vectorDim, {
-            if (mode == "PRODUCT") {
-              sparseArray
-            } else {
-              sparseArray.sortWith((a, b) => a._1 < b._1)
-            }
-          }).asInstanceOf[SparseVector]
+          retVectorArray += (EntryProxyActor.nextId.getAndIncrement.toString ->
+            Vectors.sparse(vectorDim, {
+              if (mode == "PRODUCT") {
+                sparseArray
+              } else {
+                sparseArray.sortWith((a, b) => a._1 < b._1)
+              }
+            }).asInstanceOf[SparseVector])
         }
       }
       retVectorArray.toList
@@ -125,7 +126,8 @@ with ActorLogging {
   }
 
   private def readFromDataBase(tableName: String,
-                               startRow: Array[Byte], endRow: Array[Byte]): List[SparseVector] = {
+                               startRow: Array[Byte], endRow: Array[Byte]): 
+  List[(String, SparseVector)] = {
     val hbaseConf = HBaseConfiguration.create()
     hbaseConf.set(TableInputFormat.INPUT_TABLE, tableName)
     hbaseConf.set("hbase.zookeeper.quorum", zooKeeperQuorum)
@@ -161,11 +163,11 @@ with ActorLogging {
       for ((shardId, vectors) <- writeBuffer) {
         val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
         for (vectorIdx <- vectors) {
-          val sparseVector = vectorsStore(vectorIdx)
+          val (vectorId, sparseVector) = vectorsStore(vectorIdx)
           //de-duplicate, the vector is sent to the target actor for only once
           //but with all the indices, _ % maxShardNum == shardId
           vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
-            filter(_ % maxShardNum == shardId), sparseVector)
+            filter(_ % maxShardNum == shardId), (vectorId, sparseVector))
         }
         println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
           format(shardId, vectorSet.size))
@@ -178,9 +180,9 @@ with ActorLogging {
   }
 
   private def handleVectorIOMsg(vectorIO: VectorIOMsg): Unit = {
-    for (vector <- vectorIO.vectors){
+    for ((vectorId, vector) <- vectorIO.vectors) {
       writeBufferLock.acquire()
-      vectorsStore += Vectors.sparse(vector)
+      vectorsStore += (vectorId -> Vectors.sparse(vector))
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum,// this is the shard Id
