@@ -35,8 +35,7 @@ class LoadRunner(conf: Config) extends Actor {
         if (Random.nextDouble() < sparseFactor) {
           (currentIdx - 1, 1.0)
         } else {
-          currentIdx += 1
-          (currentIdx, 0.0)
+          (currentIdx - 1, 0.0)
         }
       }
       retPair
