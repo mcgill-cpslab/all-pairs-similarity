@@ -17,6 +17,11 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
 
+/**
+ * WriteWorker calculate the target of each vector
+ * EntryProxy devolves the load to writeworker to ensure that the "relatively high time complexity
+ * will not block the message processing"
+ */
 private class WriteWorkerActor(conf: Config, clientActor: Option[ActorRef]) extends Actor
 with ActorLogging {
   import context._

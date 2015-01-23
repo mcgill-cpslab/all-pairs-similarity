@@ -10,6 +10,12 @@ import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+/**
+ * IndexingWorkerActor indexes the real data
+ * NOTICE(@CodingCat) we cannot simply use EntryActor to index the data because when 
+ * a vector arrives at the cluster, we have no information about its target shard (we need the 
+ * functionality implemented in WriterWorkerActor
+ */
 private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
                           maxWeightMap: Option[mutable.HashMap[Int, Double]]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
