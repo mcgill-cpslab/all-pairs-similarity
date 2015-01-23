@@ -167,7 +167,7 @@ with ActorLogging {
         val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
         for (vectorIdx <- vectors) {
           val (vectorId, sparseVector) = vectorsStore(vectorIdx)
-          //de-duplicate, the vector is sent to the target actor for only once
+          //de-duplicate, the vector is sent to each shard for only once
           //but with all the indices which are _ % maxShardNum == shardId
           val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
           if (!targetIndices.isEmpty) {

@@ -20,12 +20,16 @@ object CommonUtils {
                                           conf: Config): (Config, ActorSystem) = {
     val system = ActorSystem("ClusterSystem", conf)
     val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
-
+    val maxEntryNum = conf.getInt("cpslab.allpair.maxEntryNum")
     // fix the entry Id to send to a proxy and then spawn to the multiple entries
     // otherwise, it is impossible to send data packet to multiple entries just
     // through idExtractor
     val entryIdExtractor: ShardRegion.IdExtractor = {
-      case msg => ("EntryProxy", msg)
+      // except DataPacket, it does not matter which shard the message is sent to 
+      // DataPacket is related to shard, so for a given shardId, we need to ensure that it is 
+      // always sent to the correct indexWorkerActor
+      case dp: DataPacket=> ((dp.shardId % maxEntryNum).toString, dp) 
+      case msg => (Random.nextInt(maxEntryNum).toString, msg)
     }
     val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
       case dp: DataPacket => dp.shardId.toString
