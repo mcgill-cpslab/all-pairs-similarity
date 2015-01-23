@@ -145,13 +145,10 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   private def handleDataPacket(dp: DataPacket): Unit = {
     for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
       if (!indexEntryActors.contains(indexActorId)) {
-        // if we haven't read the max weight for each dimension, we should do that
-        // before we start the first indexWorker, implemented with lazy evaluation
-        // in the definition of maxWeight
-        val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
+        val newIndexActor = context.actorOf(Props(new IndexingWorkerActor(conf,
           dp.clientActor)))
-        context.watch(newEntryActor)
-        indexEntryActors += indexActorId -> newEntryActor
+        context.watch(newIndexActor)
+        indexEntryActors += indexActorId -> newIndexActor
       }
       indexEntryActors(indexActorId) ! IndexData(vectorsToSend.toSet)
     }
