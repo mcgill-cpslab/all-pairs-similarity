@@ -79,8 +79,11 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       Some(retVectorArray)
     } catch {
       case e: Exception =>
-        e.printStackTrace()
-        None
+        val ret = new mutable.HashMap[Int, Double]
+        for (i <- 0 until conf.getInt("cpslab.allpairs.vectorDim")) {
+          ret += (i -> 1.0)
+        }
+        Some(ret)
     }
   }
 
