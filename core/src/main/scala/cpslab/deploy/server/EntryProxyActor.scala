@@ -131,7 +131,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       case (_, vector) => checkIfVectorToBeIndexed(vector)}
     val validVectors = VectorIOMsg(newVectorsSet)
     if (writeActors.size < maxIOEntryActorNum) {
-      targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, None)))
+      targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, Some(sender()))))
       writeActors += targetWriterWorker
       context.watch(targetWriterWorker)
     } else {

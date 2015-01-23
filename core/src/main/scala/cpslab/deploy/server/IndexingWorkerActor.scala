@@ -14,7 +14,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 /**
  * IndexingWorkerActor indexes the real data
  *
- * NOTICE(@CodingCat) we cannot simply use EntryActor to index the data because when 
+ * NOTE (@CodingCat) we cannot simply use EntryActor to index the data because when
  * a vector arrives at the cluster, we have no information about its target shard (we need the 
  * functionality implemented in WriterWorkerActor
  */
@@ -41,26 +41,26 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
   }
 
   // build the inverted index with the given SparseVectorWrapper
-  private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]):
-  mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
+  private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]): 
+  mutable.HashMap[String, mutable.HashMap[String, Double]]  = {
 
-    val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
-      mutable.HashMap[SparseVectorWrapper, Double]]
+    val outputSimSet = new mutable.HashMap[String, mutable.HashMap[String, Double]]
 
     // get the vectors which are similar to the query vector from the given list
     def querySimilarVectors(queryVector: SparseVectorWrapper,
                             candidateList: mutable.HashSet[Int]):
-    mutable.HashMap[SparseVectorWrapper, Double] = {
-      val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
+    mutable.HashMap[String, Double] = {
+      val queryVectorId = queryVector.sparseVector._1
+      val similarityHashMap = new mutable.HashMap[String, Double]
       // output the similar vector
       for (similarVectorCandidateIdx <- candidateList) {
         val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
         // de-duplicate the similarity calculation
-        if (outputSimSet.contains(queryVector) && 
-          !outputSimSet(queryVector).contains(similarVectorCandidate)) {
+        if (outputSimSet.contains(queryVectorId) &&
+          !outputSimSet(queryVectorId).contains(similarVectorCandidate.sparseVector._1)) {
           val sim = calculateSimilarity(similarVectorCandidate, queryVector)
           if (sim >= similarityThreshold) {
-            similarityHashMap += similarVectorCandidate -> sim
+            similarityHashMap += similarVectorCandidate.sparseVector._1 -> sim
           }
         }
       }
@@ -73,8 +73,8 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
         val similarVectors = querySimilarVectors(candidateVector,
           invertedIndex(nonZeroIdxToSaveLocally))
         // TODO: need to deduplicate
-        outputSimSet.getOrElseUpdate(candidateVector,
-          new mutable.HashMap[SparseVectorWrapper, Double]) ++= similarVectors
+        outputSimSet.getOrElseUpdate(candidateVector.sparseVector._1,
+          new mutable.HashMap[String, Double]) ++= similarVectors
       }
     }
     outputSimSet

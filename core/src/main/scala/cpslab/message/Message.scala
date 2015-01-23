@@ -19,8 +19,7 @@ case class DataPacket(shardId: Int, vectors: Set[SparseVectorWrapper],
 
 case class IndexData(vectors: Set[SparseVectorWrapper])
 
-case class SimilarityOutput(output: mutable.HashMap[SparseVectorWrapper,
-  mutable.HashMap[SparseVectorWrapper, Double]]) {
+case class SimilarityOutput(output: mutable.HashMap[String, mutable.HashMap[String, Double]]) {
 
   override def toString: String = {
     val outputStringBuilder = new mutable.StringBuilder()
@@ -37,3 +36,5 @@ case class SimilarityOutput(output: mutable.HashMap[SparseVectorWrapper,
 }
 
 case class Test(content: String) extends Message
+
+case object IOTicket
