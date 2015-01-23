@@ -25,6 +25,9 @@ class LoadRunner(conf: Config) extends Actor {
   
   private val startTime = new mutable.HashMap[String, Long]
   private val endTime = new mutable.HashMap[String, Long]
+  private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
+  
+  context.setReceiveTimeout(expDuration milliseconds)
   
   private def generateVector(): Set[(String, SparkSparseVector)] = {
     var currentIdx = 0
@@ -58,11 +61,16 @@ class LoadRunner(conf: Config) extends Actor {
     if (ioTask != null) {
       ioTask.cancel()
     }
-    println(s"$self stopped with $msgCount messages")
+    var totalResponseTime = 0L
+    for ((vectorId, startMoment) <- startTime) {
+      totalResponseTime += endTime(vectorId) - startMoment  
+    }
+    println(s"$self stopped with $msgCount messages, average response " +
+      s"time ${totalResponseTime / totalMessageCount}")
   }
   
   override def receive: Receive = {
-    case IOTicket => 
+    case IOTicket =>
       if (remoteActor != null) {
         msgCount += 1
         startTime += msgCount.toString -> System.currentTimeMillis()
@@ -73,10 +81,6 @@ class LoadRunner(conf: Config) extends Actor {
       for ((queryVectorId, similarVectors) <- output.output) {
         println(s"received output for vector $queryVectorId")
         endTime += queryVectorId -> receivedMoment
-      }
-      if (endTime.size >= totalMessageCount) {
-        context.stop(self)
-        context.system.shutdown()
       }
     case _ =>   
   }
