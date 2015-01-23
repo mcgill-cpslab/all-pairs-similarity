@@ -85,7 +85,7 @@ class LoadRunner(conf: Config) extends Actor {
 
 class LoadGenerator(conf: Config) extends Actor {
   
-  private val childNum = conf.getInt("cpslabs.allpair.benchmark.childrenNum")
+  private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
   
   override def preStart(): Unit = {
     for (i <- 0 until childNum) {
@@ -99,7 +99,8 @@ class LoadGenerator(conf: Config) extends Actor {
 }
 
 object LoadGenerator {
-  def main(args: Array[String]): Unit ={
+  
+  def main(args: Array[String]): Unit = {
     val conf = ConfigFactory.parseFile(new File(args(0))).withFallback(
       ConfigFactory.parseFile(new File(args(1)))).withFallback(ConfigFactory.load())
     val system = ActorSystem("LoadGenerator", conf)
