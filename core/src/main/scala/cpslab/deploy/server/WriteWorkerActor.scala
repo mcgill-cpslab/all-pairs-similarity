@@ -21,20 +21,17 @@ import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
  * WriteWorker calculate the target of each vector
  * EntryProxy devolves the load to writeworker to ensure that the "relatively high time complexity
  * will not block the message processing"
+ * 
+ * support both reading data from hbase and receive input via akka message
  */
 private class WriteWorkerActor(conf: Config, clientActor: Option[ActorRef]) extends Actor
 with ActorLogging {
   import context._
 
-  val clusterSharding = ClusterSharding(context.system)
-
   private var inputVectors: List[(String, SparseVector)] = null
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   private val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
   private val clientPort = conf.getString("cpslab.allpair.clientPort")
-
-  // the number of the child actors
-  private val writeActorNum = conf.getInt("cpslab.allpair.writeActorNum")
 
   // shardId -> vectorIndex
   val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
@@ -42,12 +39,13 @@ with ActorLogging {
 
   val writeBufferLock: Lock = new Lock
 
-  var parseTask: Cancellable = null
-  var writeTask: Cancellable = null
+  var parseTask: Cancellable = null // parse data from HBase
+  var writeTask: Cancellable = null // periodically send message to trigger IO
 
   var vectorsStore: ListBuffer[(String, SparseVector)] = new ListBuffer[(String, SparseVector)]
 
   val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
+  val regionActor = ClusterSharding(context.system).shardRegion(EntryProxyActor.entryProxyActorName)
   val mode = conf.getString("cpslab.allpair.runMode")
 
   override def preStart(): Unit = {
@@ -170,16 +168,19 @@ with ActorLogging {
         for (vectorIdx <- vectors) {
           val (vectorId, sparseVector) = vectorsStore(vectorIdx)
           //de-duplicate, the vector is sent to the target actor for only once
-          //but with all the indices, _ % maxShardNum == shardId
-          vectorSet += SparseVectorWrapper(sparseVector.indices.toSet.
-            filter(_ % maxShardNum == shardId), (vectorId, sparseVector))
+          //but with all the indices which are _ % maxShardNum == shardId
+          val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
+          if (!targetIndices.isEmpty) {
+            vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
+          }
         }
         println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
           format(shardId, vectorSet.size))
-        clusterSharding.shardRegion(EntryProxyActor.entryProxyActorName) !
-          DataPacket(shardId, vectorSet.toSet, clientActor)
+        regionActor ! DataPacket(shardId, vectorSet.toSet, clientActor)
       }
       writeBuffer.clear()
+      // reduce the memory footprint
+      vectorsStore.clear()
     }
     writeBufferLock.release()
   }
@@ -190,7 +191,7 @@ with ActorLogging {
       vectorsStore += (vectorId -> Vectors.sparse(vector))
       for (nonZeroIdx <- vector.indices) {
         writeBuffer.getOrElseUpdate(
-          nonZeroIdx % maxShardNum,// this is the shard Id
+          nonZeroIdx % maxShardNum, // this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
       }
       writeBufferLock.release()

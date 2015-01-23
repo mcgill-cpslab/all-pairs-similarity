@@ -10,6 +10,8 @@ import akka.contrib.pattern.{ClusterSharding, ShardRegion}
 import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.server.EntryProxyActor
 import cpslab.message.{DataPacket, LoadData, Test, VectorIOMsg}
+import cpslab.vector.SparseVectorWrapper
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 import org.apache.hadoop.hbase.util.Bytes
 
 object CommonUtils {
@@ -75,5 +77,31 @@ object CommonUtils {
       newStartKeyInt = newStartKeyInt + stepLength
     }
     loadDataRequests.toList
+  }
+
+
+  //assuming the normalized vectors
+  // TODO: move to a proper package as this is not related to deploy
+  def calculateSimilarity(vector1: SparseVectorWrapper,
+                                  vector2: SparseVectorWrapper): Double = {
+    val (_, sparseVector1) = vector1.sparseVector
+    val (_, sparseVector2) = vector2.sparseVector
+    val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
+    var similarity = 0.0
+    for (idx <- intersectIndex) {
+      similarity += (sparseVector1.values(sparseVector1.indices.indexOf(idx)) *
+        sparseVector2.values(sparseVector2.indices.indexOf(idx)))
+    }
+    similarity
+  }
+
+  def calculateSimilarity(vector1: SparkSparseVector, vector2: SparkSparseVector): Double = {
+    val intersectIndex = vector1.indices.intersect(vector2.indices)
+    var similarity = 0.0
+    for (idx <- intersectIndex) {
+      similarity += (vector1.values(vector1.indices.indexOf(idx)) *
+        vector2.values(vector2.indices.indexOf(idx)))
+    }
+    similarity
   }
 }

@@ -9,13 +9,14 @@ import scala.util.Random
 
 import akka.actor._
 import com.typesafe.config.Config
-import cpslab.deploy.CommonUtils
+import cpslab.deploy.CommonUtils._
 import cpslab.message._
-import cpslab.vector.SparseVectorWrapper
+import cpslab.vector.{SparseVector, Vectors, SparseVectorWrapper}
 import org.apache.hadoop.hbase.client.{HTable, Scan}
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 
 private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
@@ -25,8 +26,9 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   val maxIndexEntryActorNum = conf.getInt("cpslab.allpair.maxIndexEntryActorNum")
   val rand = new Random(System.currentTimeMillis())
   val mode = conf.getString("cpslab.allpair.runMode")
+  val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
 
-  lazy val maxWeight = readMaxWeight
+  lazy val maxWeightMap = readMaxWeight
 
   // the generated data structure
   // entryActorId => (SparseVectorWrapper(indices to be saved by the certain entryId,
@@ -92,7 +94,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     val tableName = loadReq.tableName
     val startRow = loadReq.startRow
     val endRow = loadReq.endRow
-    val loadRequests = CommonUtils.parseLoadDataRequest(tableName, startRow, endRow,
+    val loadRequests = parseLoadDataRequest(tableName, startRow, endRow,
       maxIOEntryActorNum)
     for (loadDataReq <- loadRequests) {
       var targetWriterWorker: ActorRef = null
@@ -109,8 +111,25 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     }
   }
 
+  private def checkIfVectorToBeIndexed(candidateVector: SparkSparseVector): Boolean = {
+    if (maxWeightMap.isDefined) {
+      val maxWeightedVector = {
+        val keys = candidateVector.indices
+        val values = maxWeightMap.map(_.filter {case (key, value) => keys.contains(key)}.
+          values.toArray).get
+        Vectors.sparse(keys.size, keys, values).asInstanceOf[SparkSparseVector]
+      }
+      calculateSimilarity(maxWeightedVector, candidateVector) >= similarityThreshold
+    } else {
+      true
+    }
+  }
+
   private def handleVectorIOMsg(vectorIOMsg: VectorIOMsg): Unit = {
     var targetWriterWorker: ActorRef = null
+    val newVectorsSet = vectorIOMsg.vectors.filter{
+      case (_, vector) => checkIfVectorToBeIndexed(vector)}
+    val validVectors = VectorIOMsg(newVectorsSet)
     if (writeActors.size < maxIOEntryActorNum) {
       targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, None)))
       writeActors += targetWriterWorker
@@ -119,7 +138,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       targetWriterWorker = writeActors.toList.apply(rand.nextInt(writeActors.size))
     }
     if (targetWriterWorker != null) {
-      targetWriterWorker ! vectorIOMsg
+      targetWriterWorker ! validVectors
     }
   }
 
@@ -130,7 +149,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
         // before we start the first indexWorker, implemented with lazy evaluation
         // in the definition of maxWeight
         val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf,
-          dp.clientActor, maxWeight)))
+          dp.clientActor)))
         context.watch(newEntryActor)
         indexEntryActors += indexActorId -> newEntryActor
       }
@@ -150,7 +169,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     case t @ Test(content) =>
       println("receiving %s".format(t))
       val newEntryActor = context.actorOf(
-        Props(new IndexingWorkerActor(conf, Some(sender()), null)))
+        Props(new IndexingWorkerActor(conf, Some(sender()))))
       context.watch(newEntryActor)
       newEntryActor ! t
   }

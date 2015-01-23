@@ -7,52 +7,22 @@ import akka.actor.{Actor, ActorRef}
 import com.typesafe.config.Config
 import cpslab.message.{IndexData, SimilarityOutput, Test}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
+import cpslab.deploy.CommonUtils._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 /**
  * IndexingWorkerActor indexes the real data
+ *
  * NOTICE(@CodingCat) we cannot simply use EntryActor to index the data because when 
  * a vector arrives at the cluster, we have no information about its target shard (we need the 
  * functionality implemented in WriterWorkerActor
  */
-private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
-                          maxWeightMap: Option[mutable.HashMap[Int, Double]]) extends Actor {
+private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
-
-  //assuming the normalized vectors
-  private def calculateSimilarity(vector1: SparseVectorWrapper,
-                                  vector2: SparseVectorWrapper): Double = {
-    val (vectorId1, sparseVector1) = vector1.sparseVector
-    val (vectorId2, sparseVector2) = vector2.sparseVector
-    val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
-    var similarity = 0.0
-    for (idx <- intersectIndex) {
-      similarity += (sparseVector1.values(sparseVector1.indices.indexOf(idx)) *
-        sparseVector2.values(sparseVector2.indices.indexOf(idx)))
-    }
-    similarity
-  }
-
-  private def checkVectorIfToBeIndexed(candidateVector: SparseVectorWrapper): Boolean = {
-    if (maxWeightMap.isDefined) {
-      val maxWeightedVector = {
-        val keys = candidateVector.sparseVector._2.indices
-        val values = maxWeightMap.map(
-          _.filter {
-            case (key, value) => keys.contains(key)
-          }.values.toArray).get
-        SparseVectorWrapper(candidateVector.indices,
-          ("maxVector", Vectors.sparse(keys.size, keys, values).asInstanceOf[SparseVector]))
-      }
-      calculateSimilarity(maxWeightedVector, candidateVector) >= similarityThreshold
-    } else {
-      true
-    }
-  }
 
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
     println("restarting indexActor for %s".format(reason))
@@ -61,17 +31,11 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef],
   private def buildInvertedIndex(candidateVectors: Set[SparseVectorWrapper]): Unit = {
     for (candidateVector <- candidateVectors) {
       //check if the vectorWrapper should be indexed
-      val shouldIndex = checkVectorIfToBeIndexed(candidateVector)
-      var currentIdx = 0
-      if (shouldIndex) {
-        vectorsStore += candidateVector
-        currentIdx = vectorsStore.length - 1
-      }
+      vectorsStore += candidateVector
+      val currentIdx = vectorsStore.length - 1
       for (nonZeroIdxToSaveLocally <- candidateVector.indices) {
-        if (shouldIndex) {
-          invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) +=
-            currentIdx
-        }
+        invertedIndex.getOrElseUpdate(nonZeroIdxToSaveLocally, new mutable.HashSet[Int]) += 
+          currentIdx
       }
     }
   }
