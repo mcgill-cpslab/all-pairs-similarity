@@ -40,7 +40,7 @@ class LoadRunner(conf: Config) extends Actor {
       }
       retPair
     }
-    ).filter(_._2 != 0.0)
+    ).filter{case (index, value) => value != 0.0}
     Set((msgCount.toString, 
       Vectors.sparse(vectorDim, idxValuePairs).asInstanceOf[SparkSparseVector]))
   }

@@ -25,6 +25,10 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
+    reason.asInstanceOf[Exception].printStackTrace()
+    if (message.isDefined) {
+      println(message)
+    }
     println("restarting indexActor for %s".format(reason))
   }
 
@@ -67,7 +71,6 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
       similarityHashMap
     }
 
-    println("candidateVectors size:%d".format(candidateVectors.size))
     for (candidateVector <- candidateVectors) {
       for (nonZeroIdxToSaveLocally <- candidateVector.indices) {
         val similarVectors = querySimilarVectors(candidateVector,
@@ -82,19 +85,21 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
 
   def receive: Receive = {
     case m @ IndexData(vectors) =>
-      //println("INDEXWORKERACTOR: received %s".format(m))
-      println("received indexdata")
-      buildInvertedIndex(vectors)
-      if (replyTo.isDefined) {
-        replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
-      } else {
-        //TODO: regulate the output (HDFS does not allow append)
-        val hadoopConf = new Configuration()
-        hadoopConf.set("fs.default.name", conf.getString("cpslab.allpair.hdfs"))
-        val fs = FileSystem.get(hadoopConf)
-        val fos = fs.create(new Path("/output_" + System.currentTimeMillis()))
-        fos.writeChars(SimilarityOutput(querySimilarItems(vectors)).toString)
-        fos.close()
+      try {
+        buildInvertedIndex(vectors)
+        if (replyTo.isDefined) {
+          replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
+        } else {
+          //TODO: regulate the output (HDFS does not allow append)
+          val hadoopConf = new Configuration()
+          hadoopConf.set("fs.default.name", conf.getString("cpslab.allpair.hdfs"))
+          val fs = FileSystem.get(hadoopConf)
+          val fos = fs.create(new Path("/output_" + System.currentTimeMillis()))
+          fos.writeChars(SimilarityOutput(querySimilarItems(vectors)).toString)
+          fos.close()
+        }
+      } catch {
+        case e: Exception => e.printStackTrace()
       }
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))

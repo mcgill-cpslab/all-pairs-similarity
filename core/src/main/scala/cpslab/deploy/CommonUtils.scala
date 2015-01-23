@@ -2,6 +2,7 @@ package cpslab.deploy
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
@@ -11,7 +12,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.server.EntryProxyActor
 import cpslab.message.{DataPacket, LoadData, Test, VectorIOMsg}
 import cpslab.vector.SparseVectorWrapper
-import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 import org.apache.hadoop.hbase.util.Bytes
 
 object CommonUtils {
@@ -28,7 +29,7 @@ object CommonUtils {
       // except DataPacket, it does not matter which shard the message is sent to 
       // DataPacket is related to shard, so for a given shardId, we need to ensure that it is 
       // always sent to the correct indexWorkerActor
-      case dp: DataPacket=> ((dp.shardId % maxEntryNum).toString, dp) 
+      case dp: DataPacket=> ((dp.shardId % maxShardNum).toString, dp)
       case msg => (Random.nextInt(maxEntryNum).toString, msg)
     }
     val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
@@ -86,25 +87,31 @@ object CommonUtils {
 
   //assuming the normalized vectors
   // TODO: move to a proper package as this is not related to deploy
-  def calculateSimilarity(vector1: SparseVectorWrapper,
-                                  vector2: SparseVectorWrapper): Double = {
+  def calculateSimilarity(vector1: SparseVectorWrapper, vector2: SparseVectorWrapper): Double = {
     val (_, sparseVector1) = vector1.sparseVector
     val (_, sparseVector2) = vector2.sparseVector
-    val intersectIndex = sparseVector1.indices.intersect(sparseVector2.indices)
-    var similarity = 0.0
-    for (idx <- intersectIndex) {
-      similarity += (sparseVector1.values(sparseVector1.indices.indexOf(idx)) *
-        sparseVector2.values(sparseVector2.indices.indexOf(idx)))
-    }
-    similarity
+    calculateSimilarity(
+      new SparkSparseVector(sparseVector1.size, sparseVector1.indices, sparseVector1.values),
+      new SparkSparseVector(sparseVector2.size, sparseVector2.indices, sparseVector2.values))
   }
 
   def calculateSimilarity(vector1: SparkSparseVector, vector2: SparkSparseVector): Double = {
-    val intersectIndex = vector1.indices.intersect(vector2.indices)
+    require(vector1.size == vector2.size, s"vector1 size: ${vector1.size}, " +
+      s"vector2 size: ${vector2.size}")
     var similarity = 0.0
-    for (idx <- intersectIndex) {
-      similarity += (vector1.values(vector1.indices.indexOf(idx)) *
-        vector2.values(vector2.indices.indexOf(idx)))
+    val vector1Map = new mutable.HashMap[Int, Double]
+    val vector2Map = new mutable.HashMap[Int, Double]
+    for (i <- 0 until vector1.indices.size) {
+      vector1Map += vector1.indices(i) -> vector1.values(i)
+    }
+    for (i <- 0 until vector2.indices.size) {
+      vector2Map += vector2.indices(i) -> vector2.values(i)
+    }
+    for ((idx, value) <- vector1Map) {
+      similarity += {
+        if (vector2Map.contains(idx)) value * vector2Map(idx)
+        else 0.0
+      }  
     }
     similarity
   }
