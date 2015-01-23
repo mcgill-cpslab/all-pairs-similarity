@@ -4,4 +4,4 @@
 target
 journal
 *.log
-conf_local
+conf_local*
