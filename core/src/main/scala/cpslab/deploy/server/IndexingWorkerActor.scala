@@ -44,24 +44,29 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
   private def querySimilarItems(candidateVectors: Set[SparseVectorWrapper]):
   mutable.HashMap[SparseVectorWrapper, mutable.HashMap[SparseVectorWrapper, Double]]  = {
 
+    val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
+      mutable.HashMap[SparseVectorWrapper, Double]]
+
     // get the vectors which are similar to the query vector from the given list
     def querySimilarVectors(queryVector: SparseVectorWrapper,
                             candidateList: mutable.HashSet[Int]):
-    List[(SparseVectorWrapper, Double)] = {
+    mutable.HashMap[SparseVectorWrapper, Double] = {
       val similarityHashMap = new mutable.HashMap[SparseVectorWrapper, Double]
       // output the similar vector
       for (similarVectorCandidateIdx <- candidateList) {
         val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
-        val sim = calculateSimilarity(similarVectorCandidate, queryVector)
-        if (sim >= similarityThreshold) {
-          similarityHashMap += similarVectorCandidate -> sim
+        // de-duplicate the similarity calculation
+        if (outputSimSet.contains(queryVector) && 
+          !outputSimSet(queryVector).contains(similarVectorCandidate)) {
+          val sim = calculateSimilarity(similarVectorCandidate, queryVector)
+          if (sim >= similarityThreshold) {
+            similarityHashMap += similarVectorCandidate -> sim
+          }
         }
       }
-      similarityHashMap.toList
+      similarityHashMap
     }
 
-    val outputSimSet = new mutable.HashMap[SparseVectorWrapper,
-      mutable.HashMap[SparseVectorWrapper, Double]]
     println("candidateVectors size:%d".format(candidateVectors.size))
     for (candidateVector <- candidateVectors) {
       for (nonZeroIdxToSaveLocally <- candidateVector.indices) {
