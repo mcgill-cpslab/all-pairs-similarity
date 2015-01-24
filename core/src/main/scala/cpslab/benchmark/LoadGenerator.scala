@@ -9,17 +9,16 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import com.typesafe.config.{ConfigFactory, Config}
-import cpslab.message.{SimilarityOutput, VectorIOMsg, IOTicket}
+import cpslab.message.{ChildStopped, SimilarityOutput, VectorIOMsg, IOTicket}
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 
-class LoadRunner(conf: Config) extends Actor {
+class LoadRunner(id: Int, conf: Config) extends Actor {
   
   private var remoteActor: ActorSelection = null
   private var ioTask: Cancellable = null
-  private var msgCount = 0
-  
   private val writeBatching = conf.getInt("cpslab.allpair.benchmark.writeBatchingDuration")
   private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
+  private var msgCount = id * totalMessageCount
   private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
@@ -76,27 +75,39 @@ class LoadRunner(conf: Config) extends Actor {
         startTime += msgCount.toString -> System.currentTimeMillis()
         remoteActor ! VectorIOMsg(generateVector())
       }
-    case output: SimilarityOutput =>
+      if (msgCount >= totalMessageCount && ioTask != null) {
+        ioTask.cancel()
+      }
+    case similarityOutput: SimilarityOutput =>
       val receivedMoment = System.currentTimeMillis()
-      for ((queryVectorId, similarVectors) <- output.output) {
+      for ((queryVectorId, similarVectors) <- similarityOutput.output) {
         println(s"received output for vector $queryVectorId")
         endTime += queryVectorId -> receivedMoment
       }
-    case _ =>   
+    case ReceiveTimeout =>
+      context.stop(self)
+      context.parent ! ChildStopped
+    case _ =>
   }
 }
 
 class LoadGenerator(conf: Config) extends Actor {
   
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
+  private val children = new mutable.HashSet[ActorRef]
   
   override def preStart(): Unit = {
     for (i <- 0 until childNum) {
-      context.actorOf(Props(new LoadRunner(conf)))
+      children += context.actorOf(Props(new LoadRunner(i, conf)))
     }
   }
   
   override def receive: Receive = {
+    case ChildStopped => 
+      children -= sender()
+      if (children.size == 0) {
+        context.system.shutdown()
+      }
     case _ =>
   }
 }

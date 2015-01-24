@@ -88,6 +88,7 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
       try {
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
+          println(s"replied to client ${replyTo.get}")
           replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
         } else {
           //TODO: regulate the output (HDFS does not allow append)

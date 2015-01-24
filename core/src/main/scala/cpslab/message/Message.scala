@@ -38,3 +38,5 @@ case class SimilarityOutput(output: mutable.HashMap[String, mutable.HashMap[Stri
 case class Test(content: String) extends Message
 
 case object IOTicket
+
+case object ChildStopped
