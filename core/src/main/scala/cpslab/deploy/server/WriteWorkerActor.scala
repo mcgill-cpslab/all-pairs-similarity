@@ -24,7 +24,7 @@ import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
  * 
  * support both reading data from hbase and receive input via akka message
  */
-private class WriteWorkerActor(conf: Config, clientActor: Option[ActorRef]) extends Actor
+private class WriteWorkerActor(conf: Config) extends Actor
 with ActorLogging {
   import context._
 
@@ -176,7 +176,7 @@ with ActorLogging {
         }
         println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
           format(shardId, vectorSet.size))
-        regionActor ! DataPacket(shardId, vectorSet.toSet, clientActor)
+        regionActor ! DataPacket(shardId, vectorSet.toSet)
       }
       writeBuffer.clear()
       // reduce the memory footprint

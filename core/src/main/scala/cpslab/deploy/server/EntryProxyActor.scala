@@ -71,7 +71,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     for (loadDataReq <- loadRequests) {
       var targetWriterWorker: ActorRef = null
       if (writeActors.size < maxIOEntryActorNum) {
-        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, Some(sender()))))
+        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf)))
         writeActors += targetWriterWorker
         context.watch(targetWriterWorker)
       } else {
@@ -103,7 +103,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
     if (newVectorsSet.size > 0) {
       val validVectors = VectorIOMsg(newVectorsSet)
       if (writeActors.size < maxIOEntryActorNum) {
-        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf, Some(sender()))))
+        targetWriterWorker = context.actorOf(Props(new WriteWorkerActor(conf)))
         writeActors += targetWriterWorker
         context.watch(targetWriterWorker)
       } else {
@@ -118,8 +118,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   private def handleDataPacket(dp: DataPacket): Unit = {
     for ((indexActorId, vectorsToSend) <- spawnToIndexActor(dp)) {
       if (!indexEntryActors.contains(indexActorId)) {
-        val newIndexActor = context.actorOf(Props(new IndexingWorkerActor(conf,
-          dp.clientActor)))
+        val newIndexActor = context.actorOf(Props(new IndexingWorkerActor(conf)))
         context.watch(newIndexActor)
         indexEntryActors += indexActorId -> newIndexActor
       }
@@ -132,14 +131,13 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
       handleLoadData(m)
     case v @ VectorIOMsg(vectors) =>
       handleVectorIOMsg(v)
-    case dp @ DataPacket(_, _, clientActor) =>
+    case dp: DataPacket =>
       handleDataPacket(dp)
     case Terminated(stoppedChild) =>
       //TODO: restart children
     case t @ Test(content) =>
       println("receiving %s".format(t))
-      val newEntryActor = context.actorOf(
-        Props(new IndexingWorkerActor(conf, Some(sender()))))
+      val newEntryActor = context.actorOf(Props(new IndexingWorkerActor(conf)))
       context.watch(newEntryActor)
       newEntryActor ! t
   }

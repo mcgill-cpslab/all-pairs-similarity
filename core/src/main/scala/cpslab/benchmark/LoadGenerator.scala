@@ -9,7 +9,7 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import com.typesafe.config.{ConfigFactory, Config}
-import cpslab.message.{ChildStopped, SimilarityOutput, VectorIOMsg, IOTicket}
+import cpslab.message._
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 
 class LoadRunner(id: Int, conf: Config) extends Actor {
@@ -22,8 +22,6 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
-  private val startTime = new mutable.HashMap[String, Long]
-  private val endTime = new mutable.HashMap[String, Long]
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
   
   context.setReceiveTimeout(expDuration milliseconds)
@@ -60,29 +58,18 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
     if (ioTask != null) {
       ioTask.cancel()
     }
-    var totalResponseTime = 0L
-    for ((vectorId, startMoment) <- startTime) {
-      totalResponseTime += endTime(vectorId) - startMoment  
-    }
-    println(s"$self stopped with $msgCount messages, average response " +
-      s"time ${totalResponseTime / totalMessageCount}")
   }
   
   override def receive: Receive = {
     case IOTicket =>
       if (remoteActor != null) {
         msgCount += 1
-        startTime += msgCount.toString -> System.currentTimeMillis()
+        context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
         remoteActor ! VectorIOMsg(generateVector())
       }
       if (msgCount >= totalMessageCount && ioTask != null) {
         ioTask.cancel()
-      }
-    case similarityOutput: SimilarityOutput =>
-      val receivedMoment = System.currentTimeMillis()
-      for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        println(s"received output for vector $queryVectorId")
-        endTime += queryVectorId -> receivedMoment
+        context.stop(self)
       }
     case ReceiveTimeout =>
       context.stop(self)
@@ -92,14 +79,31 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
 }
 
 class LoadGenerator(conf: Config) extends Actor {
-  
+
+  private val startTime = new mutable.HashMap[String, Long]
+  private val endTime = new mutable.HashMap[String, Long]
+
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
   private val children = new mutable.HashSet[ActorRef]
+
+  private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
+
+  context.setReceiveTimeout(expDuration milliseconds)
   
   override def preStart(): Unit = {
     for (i <- 0 until childNum) {
       children += context.actorOf(Props(new LoadRunner(i, conf)))
     }
+  }
+  
+  override def postStop(): Unit = {
+    val messageNum = endTime.size
+    var totalResponseTime = 0L
+    for ((vectorId, startMoment) <- startTime) {
+      totalResponseTime += endTime(vectorId) - startMoment
+    }
+    println(s"$self stopped with $messageNum messages, average response " +
+      s"time ${totalResponseTime / messageNum}")
   }
   
   override def receive: Receive = {
@@ -108,6 +112,16 @@ class LoadGenerator(conf: Config) extends Actor {
       if (children.size == 0) {
         context.system.shutdown()
       }
+    case similarityOutput: SimilarityOutput =>
+      for ((queryVectorId, similarVectors) <- similarityOutput.output) {
+        println(s"received output for vector $queryVectorId")
+        endTime += queryVectorId -> similarityOutput.outputMoment
+      }
+    case m @ StartTime(vectorId, moment) =>
+      startTime += vectorId -> moment
+    case ReceiveTimeout =>
+      context.stop(self)
+      context.parent ! ChildStopped
     case _ =>
   }
 }
@@ -118,7 +132,7 @@ object LoadGenerator {
     val conf = ConfigFactory.parseFile(new File(args(0))).withFallback(
       ConfigFactory.parseFile(new File(args(1)))).withFallback(ConfigFactory.load())
     val system = ActorSystem("LoadGenerator", conf)
-    system.actorOf(Props(new LoadGenerator(conf)))
+    system.actorOf(Props(new LoadGenerator(conf)), name = "LoadGenerator")
     system.awaitTermination()
   }
 }

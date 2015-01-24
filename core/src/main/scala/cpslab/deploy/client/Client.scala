@@ -33,7 +33,7 @@ private class Client(config: Config) extends Actor {
       }
       context.stop(self)
       context.system.shutdown()
-    case SimilarityOutput(output) =>
+    case SimilarityOutput(output, _) =>
       //TODO: deduplicate
       println(output.size)
     case t @ Test(x) => println(t)

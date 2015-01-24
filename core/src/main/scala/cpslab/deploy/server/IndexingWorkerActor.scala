@@ -3,7 +3,7 @@ package cpslab.deploy.server
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{ActorSelection, Actor, ActorRef}
 import com.typesafe.config.Config
 import cpslab.message.{IndexData, SimilarityOutput, Test}
 import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
@@ -18,12 +18,18 @@ import org.apache.hadoop.fs.{FileSystem, Path}
  * a vector arrives at the cluster, we have no information about its target shard (we need the 
  * functionality implemented in WriterWorkerActor
  */
-private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) extends Actor {
+private class IndexingWorkerActor(conf: Config) extends Actor {
   val vectorsStore = new ListBuffer[SparseVectorWrapper]
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
+  var replyTo: Option[ActorSelection] = None
+
+  override def preStart(): Unit = {
+    replyTo = Some(context.actorSelection(conf.getString("cpslab.allpair.outputActor")))
+  }
+  
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
     reason.asInstanceOf[Exception].printStackTrace()
     if (message.isDefined) {
@@ -89,15 +95,8 @@ private class IndexingWorkerActor(conf: Config, replyTo: Option[ActorRef]) exten
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
           println(s"replied to client ${replyTo.get}")
-          replyTo.get ! SimilarityOutput(querySimilarItems(vectors))
-        } else {
-          //TODO: regulate the output (HDFS does not allow append)
-          val hadoopConf = new Configuration()
-          hadoopConf.set("fs.default.name", conf.getString("cpslab.allpair.hdfs"))
-          val fs = FileSystem.get(hadoopConf)
-          val fos = fs.create(new Path("/output_" + System.currentTimeMillis()))
-          fos.writeChars(SimilarityOutput(querySimilarItems(vectors)).toString)
-          fos.close()
+          replyTo.get ! SimilarityOutput(querySimilarItems(vectors), 
+            System.currentTimeMillis())
         }
       } catch {
         case e: Exception => e.printStackTrace()
