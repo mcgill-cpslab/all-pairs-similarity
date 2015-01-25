@@ -25,10 +25,11 @@ object SimilaritySearchService {
     val regionActorPath = ClusterSharding(system).shardRegion(EntryProxyActor.entryProxyActorName).
       path.toStringWithoutAddress
     // start the router
-    system.actorOf(
+    val routerActor = system.actorOf(
       ClusterRouterGroup(RoundRobinGroup(List(regionActorPath)), ClusterRouterGroupSettings(
         totalInstances = 100, routeesPaths = List(regionActorPath),
         allowLocalRoutees = true, useRole = Some("compute"))).props(),
       name = "regionRouter")
+    println(routerActor.path.toString + " started")
   }
 }

@@ -108,7 +108,7 @@ class LoadGenerator(conf: Config) extends Actor {
   override def postStop(): Unit = {
     val messageNum = endTime.size
     var totalResponseTime = 0L
-    for ((vectorId, startMoment) <- startTime) {
+    for ((vectorId, startMoment) <- startTime if endTime.contains(vectorId)) {
       totalResponseTime += endTime(vectorId) - startMoment
     }
     if (messageNum > 0) {

@@ -25,7 +25,9 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
   var replyTo: Option[ActorSelection] = None
 
   override def preStart(): Unit = {
-    replyTo = Some(context.actorSelection(conf.getString("cpslab.allpair.outputActor")))
+    val outputActorAddr = conf.getString("cpslab.allpair.outputActor")
+    println("connecting to " + outputActorAddr)
+    replyTo = Some(context.actorSelection(outputActorAddr))
   }
   
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
