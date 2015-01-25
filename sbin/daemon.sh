@@ -6,7 +6,7 @@ WORKDIR=`pwd`
 PID_FILE="$WORKDIR/all-pairs-similarity/pid/sim.pid"
 option=$1
 
-STARTTIME=`date+%s%N | cut -b1-13`
+STARTTIME=`date +%s%N | cut -b1-13`
 
 case $option in
 	(start)
