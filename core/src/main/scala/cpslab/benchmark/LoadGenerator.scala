@@ -69,7 +69,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
         remoteActor ! VectorIOMsg(generateVector())
         context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
       }
-      if (msgCount >= totalMessageCount && ioTask != null) {
+      if (msgCount >= totalMessageCount * (id + 1) && ioTask != null) {
         ioTask.cancel()
         context.stop(self)
       }
