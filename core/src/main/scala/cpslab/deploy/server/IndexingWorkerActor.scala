@@ -95,8 +95,7 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
           //println(s"replied to client ${replyTo.get}")
-          replyTo.get ! SimilarityOutput(querySimilarItems(vectors), 
-            System.currentTimeMillis())
+          replyTo.get ! SimilarityOutput(querySimilarItems(vectors), System.currentTimeMillis())
         }
       } catch {
         case e: Exception => e.printStackTrace()

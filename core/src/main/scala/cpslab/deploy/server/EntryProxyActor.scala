@@ -36,6 +36,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   // sparseVectorItSelf))
   private def spawnToIndexActor(dp: DataPacket): mutable.HashMap[Int,
     mutable.ListBuffer[SparseVectorWrapper]] = {
+    // indexActorId => vectors to be saved
     val writeBuffer = new mutable.HashMap[Int, mutable.ListBuffer[SparseVectorWrapper]]
     for (vectorToIndex <- dp.vectors) {
       for (i <- 0 until maxIndexEntryActorNum) {
