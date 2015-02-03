@@ -24,7 +24,9 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
   
-  context.setReceiveTimeout(expDuration milliseconds)
+  if (expDuration > 0) {
+    context.setReceiveTimeout(expDuration milliseconds)
+  }
   
   private def generateVector(): Set[(String, SparkSparseVector)] = {
     var currentIdx = 0
@@ -87,8 +89,10 @@ class LoadGenerator(conf: Config) extends Actor {
   private val children = new mutable.HashSet[ActorRef]
 
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
-
-  context.setReceiveTimeout(expDuration milliseconds)
+  
+  if (expDuration > 0) {
+    context.setReceiveTimeout(expDuration milliseconds)
+  }
   
   override def preStart(): Unit = {
     for (i <- 0 until childNum) {
@@ -102,8 +106,10 @@ class LoadGenerator(conf: Config) extends Actor {
     for ((vectorId, startMoment) <- startTime) {
       totalResponseTime += endTime(vectorId) - startMoment
     }
-    println(s"$self stopped with $messageNum messages, average response " +
-      s"time ${totalResponseTime / messageNum}")
+    if (messageNum > 0) {
+      println(s"$self stopped with $messageNum messages, average response " +
+        s"time ${totalResponseTime / messageNum}")
+    }
   }
   
   override def receive: Receive = {
