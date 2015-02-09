@@ -12,8 +12,8 @@ import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.deploy.server.EntryProxyActor
 import cpslab.message.{DataPacket, LoadData, Test, VectorIOMsg}
 import cpslab.vector.SparseVectorWrapper
-import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 import org.apache.hadoop.hbase.util.Bytes
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
 
 object CommonUtils {
 
@@ -22,14 +22,14 @@ object CommonUtils {
     val system = ActorSystem("ClusterSystem", conf)
     val maxShardNum = conf.getInt("cpslab.allpair.maxShardNum")
     val maxEntryNum = conf.getInt("cpslab.allpair.maxEntryNum")
-    // fix the entry Id to send to a proxy and then spawn to the multiple entries
+    // fix the entry Id to send to a proxy and then spawn to the multiple indexWorkers,
     // otherwise, it is impossible to send data packet to multiple entries just
     // through idExtractor
     val entryIdExtractor: ShardRegion.IdExtractor = {
-      // except DataPacket, it does not matter which shard the message is sent to 
+      // except DataPacket, it does not matter which entry the message is sent to
       // DataPacket is related to shard, so for a given shardId, we need to ensure that it is 
-      // always sent to the correct indexWorkerActor
-      case dp: DataPacket=> ((dp.shardId % maxShardNum).toString, dp)
+      // always sent to the correct indexWorkerActor (i.e. the correct EntryProxyActor)
+      case dp: DataPacket=> ((dp.shardId % maxEntryNum).toString, dp)
       case msg => (Random.nextInt(maxEntryNum).toString, msg)
     }
     val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {

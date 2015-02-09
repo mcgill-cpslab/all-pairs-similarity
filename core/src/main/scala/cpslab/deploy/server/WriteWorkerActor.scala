@@ -7,7 +7,7 @@ import scala.concurrent.Lock
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Cancellable}
+import akka.actor.{Actor, ActorLogging, Cancellable}
 import akka.contrib.pattern.ClusterSharding
 import com.typesafe.config.Config
 import cpslab.message.{DataPacket, LoadData, VectorIOMsg}
@@ -24,8 +24,7 @@ import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
  * 
  * support both reading data from hbase and receive input via akka message
  */
-private class WriteWorkerActor(conf: Config) extends Actor
-with ActorLogging {
+class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
   import context._
 
   private var inputVectors: List[(String, SparseVector)] = null
@@ -49,7 +48,7 @@ with ActorLogging {
   val mode = conf.getString("cpslab.allpair.runMode")
 
   override def preStart(): Unit = {
-    println("starting WriteWorkerActor")
+    //println("starting WriteWorkerActor")
     val ioTriggerPeriod = conf.getInt("cpslab.allpair.ioTriggerPeriod")
     writeTask = context.system.scheduler.schedule(0 milliseconds,
       ioTriggerPeriod milliseconds, self, WriteWorkerActor.IOTrigger)
@@ -65,7 +64,7 @@ with ActorLogging {
   }
 
   private def parseInput(): Unit = {
-    println("parsing Input")
+    //println("parsing Input")
     for ((vectorId, vector) <- inputVectors){
       writeBufferLock.acquire()
       vectorsStore += (vectorId -> vector)
@@ -165,8 +164,8 @@ with ActorLogging {
     if (!writeBuffer.isEmpty) {
       for ((shardId, vectors) <- writeBuffer) {
         val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
-        for (vectorIdx <- vectors) {
-          val (vectorId, sparseVector) = vectorsStore(vectorIdx)
+        for (vectorIndexInVectorsStore <- vectors) {
+          val (vectorId, sparseVector) = vectorsStore(vectorIndexInVectorsStore)
           //de-duplicate, the vector is sent to each shard for only once
           //but with all the indices which are _ % maxShardNum == shardId
           val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
@@ -174,13 +173,9 @@ with ActorLogging {
             vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
           }
         }
-        println("sending datapacket to shardRegion actor, shardId: %d, size: %d".
-          format(shardId, vectorSet.size))
         regionActor ! DataPacket(shardId, vectorSet.toSet)
       }
       writeBuffer.clear()
-      // reduce the memory footprint
-      vectorsStore.clear()
     }
     writeBufferLock.release()
   }

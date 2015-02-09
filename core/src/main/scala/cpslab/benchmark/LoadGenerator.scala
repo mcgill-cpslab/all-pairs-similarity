@@ -3,12 +3,12 @@ package cpslab.benchmark
 import java.io.File
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
-import scala.concurrent.duration._
 
 import akka.actor._
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.message._
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 
@@ -84,9 +84,14 @@ class LoadGenerator(conf: Config) extends Actor {
 
   private val startTime = new mutable.HashMap[String, Long]
   private val endTime = new mutable.HashMap[String, Long]
+  
+  private var totalStartTime = 0L
+  private var totalEndTime = 0L
 
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
   private val children = new mutable.HashSet[ActorRef]
+  
+  private val outputFilter = conf.getStringList("cpslab.allpair.benchmark.outputFilter")
 
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
   
@@ -99,7 +104,7 @@ class LoadGenerator(conf: Config) extends Actor {
       children += context.actorOf(Props(new LoadRunner(i, conf)))
     }
   }
-  
+
   override def postStop(): Unit = {
     val messageNum = endTime.size
     var totalResponseTime = 0L
@@ -108,7 +113,7 @@ class LoadGenerator(conf: Config) extends Actor {
     }
     if (messageNum > 0) {
       println(s"$self stopped with $messageNum messages, average response " +
-        s"time ${totalResponseTime / messageNum}")
+        s"time ${totalResponseTime / messageNum} totalTime: ${totalEndTime - totalStartTime}")
     }
   }
   
@@ -119,9 +124,24 @@ class LoadGenerator(conf: Config) extends Actor {
         context.system.shutdown()
       }
     case similarityOutput: SimilarityOutput =>
+      if (totalStartTime == 0) {
+        totalStartTime = System.currentTimeMillis()
+      }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        println(s"received output for vector $queryVectorId")
+        if (!outputFilter.contains(queryVectorId)) {
+          //not the seed video, then we only check the seed video appeared in outputFilter 
+          for ((similarVectorId, similarity) <- similarVectors
+               if outputFilter.contains(similarVectorId)) {
+            println(s"$queryVectorId -> $similarVectorId ($similarity)")
+          }
+        } else {
+          //this is the seed video, we output all
+          for ((similarVectorId, similarity) <- similarVectors) {
+            println(s"$similarVectorId -> $queryVectorId ($similarity)")
+          }
+        }
         endTime += queryVectorId -> similarityOutput.outputMoment
+        totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
       }
     case m @ StartTime(vectorId, moment) =>
       startTime += vectorId -> moment
