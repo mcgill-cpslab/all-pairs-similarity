@@ -31,6 +31,8 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
   var ioTask: Cancellable = null
 
   override def preStart(): Unit = {
+    val system = context.system
+    import system.dispatcher
     val outputActorAddr = conf.getString("cpslab.allpair.outputActor")
     println("connecting to " + outputActorAddr)
     replyTo = Some(context.actorSelection(outputActorAddr))
