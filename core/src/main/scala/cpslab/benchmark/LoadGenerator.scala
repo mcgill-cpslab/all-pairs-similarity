@@ -129,7 +129,6 @@ class LoadGenerator(conf: Config) extends Actor {
       startTime += vectorId -> moment
     case ReceiveTimeout =>
       context.stop(self)
-      context.parent ! ChildStopped
     case _ =>
   }
 }
