@@ -2,7 +2,6 @@ package cpslab.deploy.server
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
@@ -11,13 +10,8 @@ import akka.actor._
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils._
 import cpslab.message._
-import cpslab.vector.{SparseVector, Vectors, SparseVectorWrapper}
-import org.apache.hadoop.hbase.client.{HTable, Scan}
-import org.apache.hadoop.hbase.mapreduce.TableInputFormat
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{CellUtil, HBaseConfiguration}
-import org.apache.spark.mllib.linalg.{Vectors => SparkVectors}
-import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector}
+import cpslab.vector.SparseVectorWrapper
+import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors => SparkVectors}
 
 private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
 
@@ -38,7 +32,7 @@ private class EntryProxyActor(conf: Config) extends Actor with ActorLogging  {
   }
 
   // the generated data structure
-  // entryActorId => (SparseVectorWrapper(indices to be saved by the certain entryId,
+  // indexWorkerId => (SparseVectorWrapper(indices to be saved by the certain entryId,
   // sparseVectorItSelf))
   private def spawnToIndexActor(dp: DataPacket): mutable.HashMap[Int,
     mutable.ListBuffer[SparseVectorWrapper]] = {

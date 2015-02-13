@@ -3,13 +3,11 @@ package cpslab.deploy.server
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-import akka.actor.{ActorSelection, Actor, ActorRef}
+import akka.actor.{Actor, ActorSelection}
 import com.typesafe.config.Config
-import cpslab.message.{IndexData, SimilarityOutput, Test}
-import cpslab.vector.{SparseVector, SparseVectorWrapper, Vectors}
 import cpslab.deploy.CommonUtils._
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import cpslab.message.{IndexData, SimilarityOutput, Test}
+import cpslab.vector.SparseVectorWrapper
 
 /**
  * IndexingWorkerActor indexes the real data
@@ -94,7 +92,7 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
       try {
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
-          println(s"replied to client ${replyTo.get}")
+          //println(s"replied to client ${replyTo.get}")
           replyTo.get ! SimilarityOutput(querySimilarItems(vectors), 
             System.currentTimeMillis())
         }
