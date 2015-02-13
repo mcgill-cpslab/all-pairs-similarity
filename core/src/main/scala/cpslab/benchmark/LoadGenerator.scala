@@ -22,12 +22,6 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
-  private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
-  
-  if (expDuration > 0) {
-    context.setReceiveTimeout(expDuration milliseconds)
-  }
-  
   private def generateVector(): Set[(String, SparkSparseVector)] = {
     var currentIdx = 0
     val idxValuePairs = Seq.fill(vectorDim)(
@@ -73,9 +67,6 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
         ioTask.cancel()
         context.stop(self)
       }
-    case ReceiveTimeout =>
-      context.stop(self)
-      context.parent ! ChildStopped
     case _ =>
   }
 }
@@ -118,11 +109,6 @@ class LoadGenerator(conf: Config) extends Actor {
   }
   
   override def receive: Receive = {
-    case ChildStopped => 
-      children -= sender()
-      if (children.size == 0) {
-        context.system.shutdown()
-      }
     case similarityOutput: SimilarityOutput =>
       if (totalStartTime == 0) {
         totalStartTime = System.currentTimeMillis()
