@@ -122,8 +122,12 @@ class LoadGenerator(conf: Config) extends Actor {
       }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
         for ((similarVectorId, similarity) <- similarVectors) {
-          println(s"$queryVectorId -> $similarVectorId ($similarity)")
+          val oldSize = if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
           findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
+          val newSize = findPair(queryVectorId).size
+          if (newSize != oldSize) {
+            println(s"$queryVectorId -> $newSize")
+          }
           if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
             readyVectors += queryVectorId
           }
