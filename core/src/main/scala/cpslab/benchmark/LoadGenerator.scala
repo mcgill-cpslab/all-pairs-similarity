@@ -121,8 +121,13 @@ class LoadGenerator(conf: Config) extends Actor {
         totalStartTime = System.currentTimeMillis()
       }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
+        var updateEndTime = false
         for ((similarVectorId, similarity) <- similarVectors) {
           val oldSize = if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
+          if (!findPair.contains(queryVectorId) || 
+            !findPair(queryVectorId).contains(similarVectorId)) {
+            updateEndTime = true  
+          }
           findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
           val newSize = findPair(queryVectorId).size
           if (newSize != oldSize) {
@@ -132,7 +137,9 @@ class LoadGenerator(conf: Config) extends Actor {
             readyVectors += queryVectorId
           }
         }
-        endTime += queryVectorId -> similarityOutput.outputMoment
+        if (updateEndTime) {
+          endTime += queryVectorId -> similarityOutput.outputMoment
+        }
         totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
         if (readyVectors.size >= totalMessageCount * childNum) {
           context.system.shutdown()
