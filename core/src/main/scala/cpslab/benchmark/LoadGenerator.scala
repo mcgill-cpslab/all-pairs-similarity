@@ -114,17 +114,8 @@ class LoadGenerator(conf: Config) extends Actor {
         totalStartTime = System.currentTimeMillis()
       }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        if (!outputFilter.contains(queryVectorId)) {
-          //not the seed video, then we only check the seed video appeared in outputFilter 
-          for ((similarVectorId, similarity) <- similarVectors
-               if outputFilter.contains(similarVectorId)) {
-            println(s"$queryVectorId -> $similarVectorId ($similarity)")
-          }
-        } else {
-          //this is the seed video, we output all
-          for ((similarVectorId, similarity) <- similarVectors) {
-            println(s"$similarVectorId -> $queryVectorId ($similarity)")
-          }
+        for ((similarVectorId, similarity) <- similarVectors) {
+          println(s"$queryVectorId -> $similarVectorId ($similarity)")
         }
         endTime += queryVectorId -> similarityOutput.outputMoment
         totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
