@@ -77,7 +77,8 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
         val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
         // de-duplicate the similarity calculation
         if (outputSimSet.contains(queryVectorId) &&
-          !outputSimSet(queryVectorId).contains(similarVectorCandidate.sparseVector._1)) {
+          !outputSimSet(queryVectorId).contains(similarVectorCandidate.sparseVector._1) && 
+          queryVectorId != similarVectorCandidate.sparseVector._1) {
           val sim = calculateSimilarity(similarVectorCandidate, queryVector)
           if (sim >= similarityThreshold) {
             similarityHashMap += similarVectorCandidate.sparseVector._1 -> sim
