@@ -40,7 +40,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
     
     // normalize
     val squareSum = math.sqrt(idxValuePairs.foldLeft(0.0)((sum, pair) => sum + pair._2 * pair._2))
-    val normalizedIdxValues = idxValuePairs.map{case (id, value) => (id, value / squareSum)}
+    val normalizedIdxValues = idxValuePairs.map{case (index, value) => (index, value / squareSum)}
     
     Set((msgCount.toString, 
       Vectors.sparse(vectorDim, normalizedIdxValues).asInstanceOf[SparkSparseVector]))
