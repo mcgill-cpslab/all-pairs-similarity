@@ -29,7 +29,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       currentIdx += 1
       val retPair = {
         if (Random.nextDouble() < sparseFactor) {
-          (currentIdx - 1, 1.0)
+          (currentIdx - 1, Random.nextDouble())
         } else {
           (currentIdx - 1, 0.0)
         }
@@ -37,8 +37,13 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       retPair
     }
     ).filter{case (index, value) => value != 0.0}
+    
+    // normalize
+    val squareSum = math.sqrt(idxValuePairs.foldLeft(0.0)((sum, pair) => sum + pair._2 * pair._2))
+    val normalizedIdxValues = idxValuePairs.map{case (id, value) => (id, value / squareSum)}
+    
     Set((msgCount.toString, 
-      Vectors.sparse(vectorDim, idxValuePairs).asInstanceOf[SparkSparseVector]))
+      Vectors.sparse(vectorDim, normalizedIdxValues).asInstanceOf[SparkSparseVector]))
   }
 
   override def preStart(): Unit = {
