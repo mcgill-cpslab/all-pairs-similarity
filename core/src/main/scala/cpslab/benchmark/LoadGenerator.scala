@@ -80,15 +80,17 @@ class LoadGenerator(conf: Config) extends Actor {
 
   private val startTime = new mutable.HashMap[String, Long]
   private val endTime = new mutable.HashMap[String, Long]
+  private val findPair = new mutable.HashMap[String, mutable.HashSet[String]]
+  private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
+  private var readyVectorCount = 0
   
   private var totalStartTime = 0L
   private var totalEndTime = 0L
 
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
+  private var expectedCount = totalMessageCount * childNum
   private val children = new mutable.HashSet[ActorRef]
   
-  private val outputFilter = conf.getStringList("cpslab.allpair.benchmark.outputFilter")
-
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
   
   if (expDuration > 0) {
@@ -121,8 +123,15 @@ class LoadGenerator(conf: Config) extends Actor {
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
         for ((similarVectorId, similarity) <- similarVectors) {
           println(s"$queryVectorId -> $similarVectorId ($similarity)")
+          findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
+          if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
+            readyVectorCount += 1
+          }
         }
         endTime += queryVectorId -> similarityOutput.outputMoment
+        if (readyVectorCount == totalMessageCount * childNum) {
+          context.system.shutdown()
+        }
         totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
       }
     case m @ StartTime(vectorId, moment) =>
