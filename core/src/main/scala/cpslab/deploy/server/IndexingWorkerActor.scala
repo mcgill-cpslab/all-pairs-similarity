@@ -120,10 +120,10 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
         case e: Exception => e.printStackTrace()
       }
     case IOTicket =>
-      //println(s"replied to client ${replyTo.get}")
-      //replyTo.get ! SimilarityOutput(querySimilarItems(vectors), System.currentTimeMillis())
-      replyTo.get ! SimilarityOutput(writeBuffer.clone(), System.currentTimeMillis())
-      writeBuffer.clear()
+      if (!writeBuffer.isEmpty) {
+        replyTo.get ! SimilarityOutput(writeBuffer.clone(), System.currentTimeMillis())
+        writeBuffer.clear()
+      }
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
       replyTo.get ! t
