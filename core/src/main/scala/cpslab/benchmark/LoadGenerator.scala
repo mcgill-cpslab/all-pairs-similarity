@@ -22,28 +22,21 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
+  private val ccWebVideoLoadGenerator = new CCWEBVideoLoadGenerator(conf.getString("cpslab.allpair." +
+    "benchmark.ccweb.path"))
+
+  val videos = ccWebVideoLoadGenerator.generateVectors
+  
   private def generateVector(): Set[(String, SparkSparseVector)] = {
-    var currentIdx = 0
-    val idxValuePairs = Seq.fill(vectorDim)(
-    {
-      currentIdx += 1
-      val retPair = {
-        if (Random.nextDouble() < sparseFactor) {
-          (currentIdx - 1, Random.nextDouble())
-        } else {
-          (currentIdx - 1, 0.0)
-        }
-      }
-      retPair
-    }
-    ).filter{case (index, value) => value != 0.0}
+    val (videoId, videoFeatureVector) = videos(Random.nextInt(videos.size))
     
     // normalize
-    val squareSum = math.sqrt(idxValuePairs.foldLeft(0.0)((sum, pair) => sum + pair._2 * pair._2))
-    val normalizedIdxValues = idxValuePairs.map{case (index, value) => (index, value / squareSum)}
+    val squareSum = math.sqrt(videoFeatureVector.values.foldLeft(0.0)((sum, value) => sum + 
+      value * value))
+    val normalizedValues = videoFeatureVector.values.map(_ / squareSum)
     
-    Set((msgCount.toString, 
-      Vectors.sparse(vectorDim, normalizedIdxValues).asInstanceOf[SparkSparseVector]))
+    Set((msgCount.toString, Vectors.sparse(vectorDim, videoFeatureVector.indices, normalizedValues).
+        asInstanceOf[SparkSparseVector]))
   }
 
   override def preStart(): Unit = {
