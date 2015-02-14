@@ -73,6 +73,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
         }  
       }
     case StartTest =>
+      println("=====Received StartTest======")
       msgCount = 0
       testPhaseStarted = true
       val system = context.system
