@@ -185,10 +185,14 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
   private def handleVectorIOMsg(vectorIO: VectorIOMsg): Unit = {
     for ((vectorId, vector) <- vectorIO.vectors) {
       writeBufferLock.acquire()
-      vectorsStore += (vectorId -> Vectors.sparse(vector))
-      val allIndices = vector.indices
-      val validIndices = allIndices.filter(i => vector.values(allIndices.indexOf(i)) >= threshold)
-      for (nonZeroIdx <- validIndices) {
+      val idxToValueMap = new mutable.HashMap[Int, Double]
+      for (i <- 0 until vector.indices.size) {
+        idxToValueMap += vector.indices(i) -> vector.values(i)  
+      }
+      val validIdxValues = idxToValueMap.filter{case (key, value) => value > threshold}.toSeq
+      val newSparseVector = Vectors.sparse(vector.size, validIdxValues).asInstanceOf[SparseVector]
+      vectorsStore += vectorId -> newSparseVector
+      for (nonZeroIdx <- validIdxValues.map(_._1)) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum, // this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
