@@ -36,8 +36,10 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
     val outputActorAddr = conf.getString("cpslab.allpair.outputActor")
     println("connecting to " + outputActorAddr)
     replyTo = Some(context.actorSelection(outputActorAddr))
-    ioTask = context.system.scheduler.schedule(0 milliseconds, outputWritingDuration milliseconds,
-      self, IOTicket)
+    if (outputWritingDuration > 0) {
+      ioTask = context.system.scheduler.schedule(0 milliseconds, outputWritingDuration milliseconds,
+        self, IOTicket)
+    }
   }
   
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
@@ -114,7 +116,11 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
       try {
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
-          updateWriteBuffer(querySimilarItems(vectors))
+          if (outputWritingDuration <= 0) {
+            replyTo.get ! SimilarityOutput(querySimilarItems(vectors), System.currentTimeMillis())
+          } else {
+            updateWriteBuffer(querySimilarItems(vectors))
+          }
         }
       } catch {
         case e: Exception => e.printStackTrace()
