@@ -27,7 +27,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val videos = ccWebVideoLoadGenerator.generateVectors
   
   private def generateVector(): Set[(String, SparkSparseVector)] = {
-    val (videoId, videoFeatureVector) = videos(Random.nextInt(videos.size))
+    val (videoId, videoFeatureVector) = videos(msgCount % videos.size)
     
     // normalize
     val squareSum = math.sqrt(videoFeatureVector.values.foldLeft(0.0)((sum, value) => sum + 

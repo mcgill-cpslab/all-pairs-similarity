@@ -203,7 +203,7 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
     case v @ VectorIOMsg(vectors) =>
       handleVectorIOMsg(v)
     case WriteWorkerActor.IOTrigger =>
-      handleIOTrigger
+      handleIOTrigger()
   }
 }
 
