@@ -67,6 +67,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
           ioTask.cancel()
         }
       } else {
+        context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
         if (msgCount >= totalMessageCount && ioTask != null) {
           ioTask.cancel()
           context.stop(self)
