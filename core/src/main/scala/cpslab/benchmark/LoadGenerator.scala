@@ -58,7 +58,6 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       if (remoteActor != null) {
         msgCount += 1
         remoteActor ! VectorIOMsg(generateVector())
-        println(s"sending $msgCount")
         context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
       }
       if (msgCount >= totalMessageCount * (id + 1) && ioTask != null) {
@@ -114,24 +113,20 @@ class LoadGenerator(conf: Config) extends Actor {
         totalStartTime = System.currentTimeMillis()
       }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        var updateEndTime = false
         for ((similarVectorId, similarity) <- similarVectors) {
           val oldSize = if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
           if (!findPair.contains(queryVectorId) || 
             !findPair(queryVectorId).contains(similarVectorId)) {
-            updateEndTime = true  
           }
           findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
           val newSize = findPair(queryVectorId).size
           if (newSize != oldSize) {
             println(s"$queryVectorId -> $newSize")
+            endTime += queryVectorId -> similarityOutput.outputMoment
           }
           if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
             readyVectors += queryVectorId
           }
-        }
-        if (updateEndTime) {
-          endTime += queryVectorId -> similarityOutput.outputMoment
         }
         totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
         if (readyVectors.size >= totalMessageCount * childNum) {

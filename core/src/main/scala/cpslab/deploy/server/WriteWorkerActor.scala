@@ -31,6 +31,8 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   private val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
   private val clientPort = conf.getString("cpslab.allpair.clientPort")
+  
+  private val threshold = conf.getDouble("cpslab.allpair.indexThreshold")
 
   // shardId -> vectorIndex
   val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
@@ -159,7 +161,7 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
     })
   }
 
-  private def handleIOTrigger: Unit = {
+  private def handleIOTrigger(): Unit = {
     writeBufferLock.acquire()
     if (!writeBuffer.isEmpty) {
       for ((shardId, vectors) <- writeBuffer) {
@@ -184,7 +186,9 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
     for ((vectorId, vector) <- vectorIO.vectors) {
       writeBufferLock.acquire()
       vectorsStore += (vectorId -> Vectors.sparse(vector))
-      for (nonZeroIdx <- vector.indices) {
+      val allIndices = vector.indices
+      val validIndices = allIndices.filter(i => vector.values(allIndices.indexOf(i)) >= threshold)
+      for (nonZeroIdx <- validIndices) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum, // this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
