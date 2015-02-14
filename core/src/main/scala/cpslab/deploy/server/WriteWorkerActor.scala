@@ -175,7 +175,9 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
             vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
           }
         }
-        regionActor ! DataPacket(shardId, vectorSet.toSet)
+        if (!vectorSet.isEmpty) {
+          regionActor ! DataPacket(shardId, vectorSet.toSet)
+        }
       }
       writeBuffer.clear()
     }
