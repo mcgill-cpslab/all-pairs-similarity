@@ -156,6 +156,8 @@ class LoadGenerator(conf: Config) extends Actor {
         for (worker <- children) {
           worker ! StartTest
         }
+      } else {
+        context.system.shutdown()
       }
     case _ =>
   }
