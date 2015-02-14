@@ -58,6 +58,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       if (remoteActor != null) {
         msgCount += 1
         remoteActor ! VectorIOMsg(generateVector())
+        println(s"sending $msgCount")
         context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
       }
       if (msgCount >= totalMessageCount * (id + 1) && ioTask != null) {
