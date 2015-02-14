@@ -22,7 +22,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
   private val ccWebVideoLoadGenerator = new CCWEBVideoLoadGenerator(
-    conf.getString("cpslab.allpair." + "benchmark.ccweb.path"))
+    conf.getString("cpslab.allpair.benchmark.ccweb.path"))
 
   private val videos = ccWebVideoLoadGenerator.generateVectors
   
