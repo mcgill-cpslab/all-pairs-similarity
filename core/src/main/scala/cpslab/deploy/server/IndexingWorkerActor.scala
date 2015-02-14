@@ -5,10 +5,10 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
-import akka.actor.{Cancellable, Actor, ActorSelection}
+import akka.actor.{ReceiveTimeout, Cancellable, Actor, ActorSelection}
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils._
-import cpslab.message.{IOTicket, IndexData, SimilarityOutput, Test}
+import cpslab.message._
 import cpslab.vector.SparseVectorWrapper
 
 /**
@@ -30,6 +30,14 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
   
   var ioTask: Cancellable = null
 
+  private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
+  
+  private var stopUpdateIndex = false
+
+  if (expDuration > 0) {
+    context.setReceiveTimeout(expDuration milliseconds)
+  }
+  
   override def preStart(): Unit = {
     val system = context.system
     import system.dispatcher
@@ -114,7 +122,9 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
   def receive: Receive = {
     case m @ IndexData(vectors) =>
       try {
-        buildInvertedIndex(vectors)
+        if (!stopUpdateIndex) {
+          buildInvertedIndex(vectors)
+        }
         if (replyTo.isDefined) {
           if (outputWritingDuration <= 0) {
             replyTo.get ! SimilarityOutput(querySimilarItems(vectors), System.currentTimeMillis())
@@ -130,6 +140,8 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
         replyTo.get ! SimilarityOutput(writeBuffer.clone(), System.currentTimeMillis())
         writeBuffer.clear()
       }
+    case ReceiveTimeout =>
+      stopUpdateIndex = true
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))
       replyTo.get ! t
