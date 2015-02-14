@@ -19,13 +19,12 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val writeBatching = conf.getInt("cpslab.allpair.benchmark.writeBatchingDuration")
   private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
   private var msgCount = id * totalMessageCount
-  private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
-  private val ccWebVideoLoadGenerator = new CCWEBVideoLoadGenerator(conf.getString("cpslab.allpair." +
-    "benchmark.ccweb.path"))
+  private val ccWebVideoLoadGenerator = new CCWEBVideoLoadGenerator(
+    conf.getString("cpslab.allpair." + "benchmark.ccweb.path"))
 
-  val videos = ccWebVideoLoadGenerator.generateVectors
+  private val videos = ccWebVideoLoadGenerator.generateVectors
   
   private def generateVector(): Set[(String, SparkSparseVector)] = {
     val (videoId, videoFeatureVector) = videos(Random.nextInt(videos.size))
