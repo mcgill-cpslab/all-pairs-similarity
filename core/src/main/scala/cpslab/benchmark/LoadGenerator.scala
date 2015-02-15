@@ -59,19 +59,18 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
     case IOTicket =>
       if (remoteActor != null) {
         msgCount += 1
-        remoteActor ! VectorIOMsg(generateVector())
-      //  context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
-      }
-      if (!testPhaseStarted) {
-        if (msgCount >= videos.size && ioTask != null) {
-          ioTask.cancel()
+        if (!testPhaseStarted) {
+          if (msgCount > videos.size && ioTask != null) {
+            ioTask.cancel()
+          }
+        } else {
+          context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
+          if (msgCount > totalMessageCount && ioTask != null) {
+            ioTask.cancel()
+            context.stop(self)
+          }
         }
-      } else {
-        context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
-        if (msgCount >= totalMessageCount && ioTask != null) {
-          ioTask.cancel()
-          context.stop(self)
-        }  
+        remoteActor ! VectorIOMsg(generateVector())
       }
     case StartTest =>
       println("=====Received StartTest======")

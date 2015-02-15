@@ -163,24 +163,22 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
 
   private def handleIOTrigger(): Unit = {
     writeBufferLock.acquire()
-    if (!writeBuffer.isEmpty) {
-      for ((shardId, vectors) <- writeBuffer) {
-        val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
-        for (vectorIndexInVectorsStore <- vectors) {
-          val (vectorId, sparseVector) = vectorsStore(vectorIndexInVectorsStore)
-          //de-duplicate, the vector is sent to each shard for only once
-          //but with all the indices which are _ % maxShardNum == shardId
-          val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
-          if (!targetIndices.isEmpty) {
-            vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
-          }
-        }
-        if (!vectorSet.isEmpty) {
-          regionActor ! DataPacket(shardId, vectorSet.toSet)
+    for ((shardId, vectors) <- writeBuffer) {
+      val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
+      for (vectorIndexInVectorsStore <- vectors) {
+        val (vectorId, sparseVector) = vectorsStore(vectorIndexInVectorsStore)
+        //de-duplicate, the vector is sent to each shard for only once
+        //but with all the indices which are _ % maxShardNum == shardId
+        val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
+        if (!targetIndices.isEmpty) {
+          vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
         }
       }
-      writeBuffer.clear()
+      if (!vectorSet.isEmpty) {
+        regionActor ! DataPacket(shardId, vectorSet.toSet)
+      }
     }
+    writeBuffer.clear()
     writeBufferLock.release()
   }
 
