@@ -34,9 +34,9 @@ object CommonUtils {
     }
     val shardIdResolver: ShardRegion.ShardResolver = msg => msg match {
       case dp: DataPacket => dp.shardId.toString
-      case ld: LoadData => Random.nextInt(maxShardNum + 1).toString
+      case ld: LoadData => Random.nextInt(maxShardNum).toString
       case p @ Test(_) => "1"//just for test
-      case v: VectorIOMsg => Random.nextInt(maxShardNum + 1).toString
+      case v: VectorIOMsg => Random.nextInt(maxShardNum).toString
     }
     ClusterSharding(system).start(
       typeName = EntryProxyActor.entryProxyActorName,
