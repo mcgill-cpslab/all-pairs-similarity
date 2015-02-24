@@ -2,11 +2,13 @@ package cpslab.deploy.server
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.duration._
+import scala.language.{implicitConversions, postfixOps}
 
-import akka.actor.{Actor, ActorSelection}
+import akka.actor.{Cancellable, Actor, ActorSelection}
 import com.typesafe.config.Config
 import cpslab.deploy.CommonUtils._
-import cpslab.message.{IndexData, SimilarityOutput, Test}
+import cpslab.message.{IOTicket, IndexData, SimilarityOutput, Test}
 import cpslab.vector.SparseVectorWrapper
 
 /**
@@ -21,11 +23,21 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
   val similarityThreshold = conf.getDouble("cpslab.allpair.similarityThreshold")
   // dimentsionid => vector index
   val invertedIndex = new mutable.HashMap[Int, mutable.HashSet[Int]]
+  val outputWritingDuration = conf.getLong("cpslab.allpair.outputIODuration")
+  val writeBuffer = new mutable.HashMap[String, mutable.HashMap[String, Double]]
 
   var replyTo: Option[ActorSelection] = None
+  
+  var ioTask: Cancellable = null
 
   override def preStart(): Unit = {
-    replyTo = Some(context.actorSelection(conf.getString("cpslab.allpair.outputActor")))
+    val system = context.system
+    import system.dispatcher
+    val outputActorAddr = conf.getString("cpslab.allpair.outputActor")
+    println("connecting to " + outputActorAddr)
+    replyTo = Some(context.actorSelection(outputActorAddr))
+    ioTask = context.system.scheduler.schedule(0 milliseconds, outputWritingDuration milliseconds,
+      self, IOTicket)
   }
   
   override def preRestart(reason : scala.Throwable, message : scala.Option[scala.Any]): Unit = {
@@ -65,7 +77,8 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
         val similarVectorCandidate = vectorsStore(similarVectorCandidateIdx)
         // de-duplicate the similarity calculation
         if (outputSimSet.contains(queryVectorId) &&
-          !outputSimSet(queryVectorId).contains(similarVectorCandidate.sparseVector._1)) {
+          !outputSimSet(queryVectorId).contains(similarVectorCandidate.sparseVector._1) && 
+          queryVectorId != similarVectorCandidate.sparseVector._1) {
           val sim = calculateSimilarity(similarVectorCandidate, queryVector)
           if (sim >= similarityThreshold) {
             similarityHashMap += similarVectorCandidate.sparseVector._1 -> sim
@@ -86,18 +99,30 @@ private class IndexingWorkerActor(conf: Config) extends Actor {
     }
     outputSimSet
   }
+  
+  private def updateWriteBuffer(newData: mutable.HashMap[String, mutable.HashMap[String, Double]]): 
+  Unit = {
+    for ((queryVectorID, similarVectors) <- newData; 
+         (similarVectorID, similarity) <- similarVectors) {
+      writeBuffer.getOrElseUpdate(queryVectorID, new mutable.HashMap[String, Double]) += 
+        similarVectorID -> similarity
+    }  
+  }
 
   def receive: Receive = {
     case m @ IndexData(vectors) =>
       try {
         buildInvertedIndex(vectors)
         if (replyTo.isDefined) {
-          //println(s"replied to client ${replyTo.get}")
-          replyTo.get ! SimilarityOutput(querySimilarItems(vectors), 
-            System.currentTimeMillis())
+          updateWriteBuffer(querySimilarItems(vectors))
         }
       } catch {
         case e: Exception => e.printStackTrace()
+      }
+    case IOTicket =>
+      if (!writeBuffer.isEmpty) {
+        replyTo.get ! SimilarityOutput(writeBuffer.clone(), System.currentTimeMillis())
+        writeBuffer.clear()
       }
     case t @ Test(_) =>
       println("receiving %s in IndexWorkerActor, sending to %s".format(t, replyTo))

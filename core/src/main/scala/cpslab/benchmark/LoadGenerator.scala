@@ -8,8 +8,8 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import akka.actor._
-import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.message._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 
 class LoadRunner(id: Int, conf: Config) extends Actor {
@@ -22,12 +22,6 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
-  private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
-  
-  if (expDuration > 0) {
-    context.setReceiveTimeout(expDuration milliseconds)
-  }
-  
   private def generateVector(): Set[(String, SparkSparseVector)] = {
     var currentIdx = 0
     val idxValuePairs = Seq.fill(vectorDim)(
@@ -35,7 +29,7 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       currentIdx += 1
       val retPair = {
         if (Random.nextDouble() < sparseFactor) {
-          (currentIdx - 1, 1.0)
+          (currentIdx - 1, Random.nextDouble())
         } else {
           (currentIdx - 1, 0.0)
         }
@@ -43,8 +37,13 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
       retPair
     }
     ).filter{case (index, value) => value != 0.0}
+    
+    // normalize
+    val squareSum = math.sqrt(idxValuePairs.foldLeft(0.0)((sum, pair) => sum + pair._2 * pair._2))
+    val normalizedIdxValues = idxValuePairs.map{case (index, value) => (index, value / squareSum)}
+    
     Set((msgCount.toString, 
-      Vectors.sparse(vectorDim, idxValuePairs).asInstanceOf[SparkSparseVector]))
+      Vectors.sparse(vectorDim, normalizedIdxValues).asInstanceOf[SparkSparseVector]))
   }
 
   override def preStart(): Unit = {
@@ -69,13 +68,10 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
         remoteActor ! VectorIOMsg(generateVector())
         context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
       }
-      if (msgCount >= totalMessageCount && ioTask != null) {
+      if (msgCount >= totalMessageCount * (id + 1) && ioTask != null) {
         ioTask.cancel()
         context.stop(self)
       }
-    case ReceiveTimeout =>
-      context.stop(self)
-      context.parent ! ChildStopped
     case _ =>
   }
 }
@@ -84,15 +80,17 @@ class LoadGenerator(conf: Config) extends Actor {
 
   private val startTime = new mutable.HashMap[String, Long]
   private val endTime = new mutable.HashMap[String, Long]
+  private val findPair = new mutable.HashMap[String, mutable.HashSet[String]]
+  private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
+  private val readyVectors = new mutable.HashSet[String]
   
   private var totalStartTime = 0L
   private var totalEndTime = 0L
 
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
+  private var expectedCount = totalMessageCount * childNum
   private val children = new mutable.HashSet[ActorRef]
   
-  private val outputFilter = conf.getStringList("cpslab.allpair.benchmark.outputFilter")
-
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
   
   if (expDuration > 0) {
@@ -108,7 +106,7 @@ class LoadGenerator(conf: Config) extends Actor {
   override def postStop(): Unit = {
     val messageNum = endTime.size
     var totalResponseTime = 0L
-    for ((vectorId, startMoment) <- startTime) {
+    for ((vectorId, startMoment) <- startTime if endTime.contains(vectorId)) {
       totalResponseTime += endTime(vectorId) - startMoment
     }
     if (messageNum > 0) {
@@ -118,36 +116,39 @@ class LoadGenerator(conf: Config) extends Actor {
   }
   
   override def receive: Receive = {
-    case ChildStopped => 
-      children -= sender()
-      if (children.size == 0) {
-        context.system.shutdown()
-      }
     case similarityOutput: SimilarityOutput =>
       if (totalStartTime == 0) {
         totalStartTime = System.currentTimeMillis()
       }
       for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        if (!outputFilter.contains(queryVectorId)) {
-          //not the seed video, then we only check the seed video appeared in outputFilter 
-          for ((similarVectorId, similarity) <- similarVectors
-               if outputFilter.contains(similarVectorId)) {
-            println(s"$queryVectorId -> $similarVectorId ($similarity)")
+        var updateEndTime = false
+        for ((similarVectorId, similarity) <- similarVectors) {
+          val oldSize = if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
+          if (!findPair.contains(queryVectorId) || 
+            !findPair(queryVectorId).contains(similarVectorId)) {
+            updateEndTime = true  
           }
-        } else {
-          //this is the seed video, we output all
-          for ((similarVectorId, similarity) <- similarVectors) {
-            println(s"$similarVectorId -> $queryVectorId ($similarity)")
+          findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
+          val newSize = findPair(queryVectorId).size
+          if (newSize != oldSize) {
+            println(s"$queryVectorId -> $newSize")
+          }
+          if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
+            readyVectors += queryVectorId
           }
         }
-        endTime += queryVectorId -> similarityOutput.outputMoment
+        if (updateEndTime) {
+          endTime += queryVectorId -> similarityOutput.outputMoment
+        }
         totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
+        if (readyVectors.size >= totalMessageCount * childNum) {
+          context.system.shutdown()
+        }
       }
     case m @ StartTime(vectorId, moment) =>
       startTime += vectorId -> moment
     case ReceiveTimeout =>
       context.stop(self)
-      context.parent ! ChildStopped
     case _ =>
   }
 }
