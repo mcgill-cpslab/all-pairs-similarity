@@ -8,8 +8,8 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import akka.actor._
-import com.typesafe.config.{Config, ConfigFactory}
 import cpslab.message._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.spark.mllib.linalg.{SparseVector => SparkSparseVector, Vectors}
 
 class LoadRunner(id: Int, conf: Config) extends Actor {
@@ -82,7 +82,7 @@ class LoadGenerator(conf: Config) extends Actor {
   private val endTime = new mutable.HashMap[String, Long]
   private val findPair = new mutable.HashMap[String, mutable.HashSet[String]]
   private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
-  private var readyVectors = new mutable.HashSet[String]
+  private val readyVectors = new mutable.HashSet[String]
   
   private var totalStartTime = 0L
   private var totalEndTime = 0L
