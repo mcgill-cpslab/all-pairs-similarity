@@ -39,5 +39,5 @@ case class Test(content: String) extends Message
 case object IOTicket
 
 //benchmark
-case object ChildStopped
+case object StartTest extends Message
 case class StartTime(vectorId: String, moment: Long)

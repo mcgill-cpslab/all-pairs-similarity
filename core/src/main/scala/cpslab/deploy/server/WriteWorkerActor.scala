@@ -31,6 +31,8 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   private val zooKeeperQuorum = conf.getString("cpslab.allpair.zooKeeperQuorum")
   private val clientPort = conf.getString("cpslab.allpair.clientPort")
+  
+  private val threshold = conf.getDouble("cpslab.allpair.indexThreshold")
 
   // shardId -> vectorIndex
   val writeBuffer: mutable.HashMap[Int, mutable.HashSet[Int]] =
@@ -159,32 +161,38 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
     })
   }
 
-  private def handleIOTrigger: Unit = {
+  private def handleIOTrigger(): Unit = {
     writeBufferLock.acquire()
-    if (!writeBuffer.isEmpty) {
-      for ((shardId, vectors) <- writeBuffer) {
-        val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
-        for (vectorIndexInVectorsStore <- vectors) {
-          val (vectorId, sparseVector) = vectorsStore(vectorIndexInVectorsStore)
-          //de-duplicate, the vector is sent to each shard for only once
-          //but with all the indices which are _ % maxShardNum == shardId
-          val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
-          if (!targetIndices.isEmpty) {
-            vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
-          }
+    for ((shardId, vectors) <- writeBuffer) {
+      val vectorSet = new mutable.HashSet[SparseVectorWrapper]()
+      for (vectorIndexInVectorsStore <- vectors) {
+        val (vectorId, sparseVector) = vectorsStore(vectorIndexInVectorsStore)
+        //de-duplicate, the vector is sent to each shard for only once
+        //but with all the indices which are _ % maxShardNum == shardId
+        val targetIndices = sparseVector.indices.toSet.filter(_ % maxShardNum == shardId)
+        if (!targetIndices.isEmpty) {
+          vectorSet += SparseVectorWrapper(targetIndices, (vectorId, sparseVector))
         }
+      }
+      if (!vectorSet.isEmpty) {
         regionActor ! DataPacket(shardId, vectorSet.toSet)
       }
-      writeBuffer.clear()
     }
+    writeBuffer.clear()
     writeBufferLock.release()
   }
 
   private def handleVectorIOMsg(vectorIO: VectorIOMsg): Unit = {
     for ((vectorId, vector) <- vectorIO.vectors) {
       writeBufferLock.acquire()
-      vectorsStore += (vectorId -> Vectors.sparse(vector))
-      for (nonZeroIdx <- vector.indices) {
+      val idxToValueMap = new mutable.HashMap[Int, Double]
+      for (i <- 0 until vector.indices.size) {
+        idxToValueMap += vector.indices(i) -> vector.values(i)  
+      }
+      val validIdxValues = idxToValueMap.filter{case (key, value) => value > threshold}.toSeq
+      val newSparseVector = Vectors.sparse(vector.size, validIdxValues).asInstanceOf[SparseVector]
+      vectorsStore += vectorId -> newSparseVector
+      for (nonZeroIdx <- validIdxValues.map(_._1)) {
         writeBuffer.getOrElseUpdate(
           nonZeroIdx % maxShardNum, // this is the shard Id
           new mutable.HashSet[Int]) += vectorsStore.size - 1
@@ -199,7 +207,7 @@ class WriteWorkerActor(conf: Config) extends Actor with ActorLogging {
     case v @ VectorIOMsg(vectors) =>
       handleVectorIOMsg(v)
     case WriteWorkerActor.IOTrigger =>
-      handleIOTrigger
+      handleIOTrigger()
   }
 }
 

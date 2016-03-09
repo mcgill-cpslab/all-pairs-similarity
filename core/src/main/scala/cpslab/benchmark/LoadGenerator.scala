@@ -19,31 +19,25 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
   private val writeBatching = conf.getInt("cpslab.allpair.benchmark.writeBatchingDuration")
   private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
   private var msgCount = id * totalMessageCount
-  private val sparseFactor = conf.getDouble("cpslab.allpair.sparseFactor")
   private val vectorDim = conf.getInt("cpslab.allpair.vectorDim")
   
+  private val ccWebVideoLoadGenerator = new CCWEBVideoLoadGenerator(
+    conf.getString("cpslab.allpair.benchmark.ccweb.path"))
+
+  private val videos = ccWebVideoLoadGenerator.generateVectors
+
+  private var testPhaseStarted = false
+  
   private def generateVector(): Set[(String, SparkSparseVector)] = {
-    var currentIdx = 0
-    val idxValuePairs = Seq.fill(vectorDim)(
-    {
-      currentIdx += 1
-      val retPair = {
-        if (Random.nextDouble() < sparseFactor) {
-          (currentIdx - 1, Random.nextDouble())
-        } else {
-          (currentIdx - 1, 0.0)
-        }
-      }
-      retPair
-    }
-    ).filter{case (index, value) => value != 0.0}
+    val (videoId, videoFeatureVector) = videos(msgCount % videos.size)
     
     // normalize
-    val squareSum = math.sqrt(idxValuePairs.foldLeft(0.0)((sum, pair) => sum + pair._2 * pair._2))
-    val normalizedIdxValues = idxValuePairs.map{case (index, value) => (index, value / squareSum)}
+    val squareSum = math.sqrt(videoFeatureVector.values.foldLeft(0.0)((sum, value) => sum + 
+      value * value))
+    val normalizedValues = videoFeatureVector.values.map(_ / squareSum)
     
-    Set((msgCount.toString, 
-      Vectors.sparse(vectorDim, normalizedIdxValues).asInstanceOf[SparkSparseVector]))
+    Set((msgCount.toString, Vectors.sparse(vectorDim, videoFeatureVector.indices, normalizedValues).
+        asInstanceOf[SparkSparseVector]))
   }
 
   override def preStart(): Unit = {
@@ -65,13 +59,27 @@ class LoadRunner(id: Int, conf: Config) extends Actor {
     case IOTicket =>
       if (remoteActor != null) {
         msgCount += 1
+        if (!testPhaseStarted) {
+          if (msgCount > videos.size && ioTask != null) {
+            ioTask.cancel()
+          }
+        } else {
+          context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
+          if (msgCount > totalMessageCount && ioTask != null) {
+            ioTask.cancel()
+            context.stop(self)
+          }
+        }
         remoteActor ! VectorIOMsg(generateVector())
-        context.parent ! StartTime(msgCount.toString, System.currentTimeMillis())
       }
-      if (msgCount >= totalMessageCount * (id + 1) && ioTask != null) {
-        ioTask.cancel()
-        context.stop(self)
-      }
+    case StartTest =>
+      println("=====Received StartTest======")
+      msgCount = 0
+      testPhaseStarted = true
+      val system = context.system
+      import system.dispatcher
+      ioTask = context.system.scheduler.schedule(0 milliseconds, writeBatching milliseconds,
+        self, IOTicket)
     case _ =>
   }
 }
@@ -80,18 +88,16 @@ class LoadGenerator(conf: Config) extends Actor {
 
   private val startTime = new mutable.HashMap[String, Long]
   private val endTime = new mutable.HashMap[String, Long]
-  private val findPair = new mutable.HashMap[String, mutable.HashSet[String]]
+  private val findPair = new mutable.HashMap[String, mutable.HashSet[(String, Double)]]
   private val totalMessageCount = conf.getInt("cpslab.allpair.benchmark.totalMessageCount")
   private val readyVectors = new mutable.HashSet[String]
   
-  private var totalStartTime = 0L
-  private var totalEndTime = 0L
-
   private val childNum = conf.getInt("cpslab.allpair.benchmark.childrenNum")
-  private var expectedCount = totalMessageCount * childNum
   private val children = new mutable.HashSet[ActorRef]
   
   private val expDuration = conf.getLong("cpslab.allpair.benchmark.expDuration")
+  
+  private var testPhaseStarted = false
   
   if (expDuration > 0) {
     context.setReceiveTimeout(expDuration milliseconds)
@@ -106,49 +112,62 @@ class LoadGenerator(conf: Config) extends Actor {
   override def postStop(): Unit = {
     val messageNum = endTime.size
     var totalResponseTime = 0L
+    var min = Long.MaxValue
+    var max = Long.MinValue
     for ((vectorId, startMoment) <- startTime if endTime.contains(vectorId)) {
-      totalResponseTime += endTime(vectorId) - startMoment
+      val duration = endTime(vectorId) - startMoment
+      totalResponseTime += duration
+      if (duration > max) {
+        max = duration
+      }
+      if (duration < min) {
+        min = duration  
+      }
     }
     if (messageNum > 0) {
       println(s"$self stopped with $messageNum messages, average response " +
-        s"time ${totalResponseTime / messageNum} totalTime: ${totalEndTime - totalStartTime}")
+        s"time ${totalResponseTime / messageNum}, max:$max " +
+        s"min:$min")
     }
   }
   
   override def receive: Receive = {
     case similarityOutput: SimilarityOutput =>
-      if (totalStartTime == 0) {
-        totalStartTime = System.currentTimeMillis()
-      }
-      for ((queryVectorId, similarVectors) <- similarityOutput.output) {
-        var updateEndTime = false
-        for ((similarVectorId, similarity) <- similarVectors) {
-          val oldSize = if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
-          if (!findPair.contains(queryVectorId) || 
-            !findPair(queryVectorId).contains(similarVectorId)) {
-            updateEndTime = true  
+      if (testPhaseStarted) {
+        for ((queryVectorId, similarVectors) <- similarityOutput.output) {
+          for ((similarVectorId, similarity) <- similarVectors) {
+            val oldSize = {
+              if (!findPair.contains(queryVectorId)) -1 else findPair(queryVectorId).size
+            }
+            findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[(String, Double)]) +=
+              similarVectorId -> similarity
+            val newSize = findPair(queryVectorId).size
+            if (newSize != oldSize) {
+              println(s"$queryVectorId -> $newSize " +
+                s"lasting Time:${similarityOutput.outputMoment - startTime(queryVectorId)}")
+              endTime += queryVectorId -> similarityOutput.outputMoment
+            }
+            if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
+              readyVectors += queryVectorId
+            }
           }
-          findPair.getOrElseUpdate(queryVectorId, new mutable.HashSet[String]) += similarVectorId
-          val newSize = findPair(queryVectorId).size
-          if (newSize != oldSize) {
-            println(s"$queryVectorId -> $newSize")
+          if (readyVectors.size >= totalMessageCount * childNum) {
+            context.system.shutdown()
           }
-          if (findPair(queryVectorId).size >= totalMessageCount * childNum - 1) {
-            readyVectors += queryVectorId
-          }
-        }
-        if (updateEndTime) {
-          endTime += queryVectorId -> similarityOutput.outputMoment
-        }
-        totalEndTime = math.max(totalEndTime, similarityOutput.outputMoment)
-        if (readyVectors.size >= totalMessageCount * childNum) {
-          context.system.shutdown()
         }
       }
     case m @ StartTime(vectorId, moment) =>
       startTime += vectorId -> moment
     case ReceiveTimeout =>
-      context.stop(self)
+      // start the test evaluation phase
+      if (!testPhaseStarted) {
+        testPhaseStarted = true
+        for (worker <- children) {
+          worker ! StartTest
+        }
+      } else {
+        context.system.shutdown()
+      }
     case _ =>
   }
 }
